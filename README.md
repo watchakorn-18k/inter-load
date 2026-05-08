@@ -1,5 +1,7 @@
 # Inter-Load
 
+![alt text](screens/image.png)
+
 **Intercept. Inspect. Forward.**
 
 Ever struggled with webhook integrations where you have no idea what the incoming payload looks like? No way to debug because it's server-to-server? Setting up dummy endpoints just to see the data feels like overkill?
@@ -118,7 +120,6 @@ curl -X POST http://localhost:3030/webhook/github \
 
 ## Roadmap
 
-- [ ] Persist payloads to file / SQLite
 - [ ] Auto-forward with saved rules (no manual trigger needed)
 - [ ] Filter / Search payloads
 - [ ] Export payloads as JSON / CSV
