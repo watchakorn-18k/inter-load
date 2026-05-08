@@ -36,4 +36,5 @@ rcgen = { version = "0.13", features = ["crypto", "aws_lc_rs"] }
 http-body-util = "0.1"
 hyper = "1"
 bytes = "1"
+dirs = "5"
 

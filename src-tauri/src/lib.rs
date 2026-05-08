@@ -93,6 +93,7 @@ pub struct AppState {
     pub auto_forward_logs: Mutex<Vec<AutoForwardLog>>,
     pub ws_connections: Mutex<u32>,
     pub ws_total_messages: Mutex<u64>,
+    pub paused: Mutex<bool>,
     // Proxy
     pub proxy_traffic: Mutex<Vec<ProxyTrafficEntry>>,
     pub proxy_running: Mutex<bool>,
@@ -469,6 +470,42 @@ read -n 1 -s"
 }
 
 #[tauri::command]
+fn remove_ca_cert() -> Result<String, String> {
+    let helper_script = r#"#!/bin/bash
+echo "Removing Inter-Load CA certificates..."
+echo "Your password is needed to remove from System Keychain."
+echo ""
+while sudo security delete-certificate -c "Inter-Load CA" /Library/Keychains/System.keychain 2>/dev/null; do
+    :
+done
+echo ""
+echo "All Inter-Load CA certificates removed."
+echo ""
+echo "You can close this Terminal window."
+read -n 1 -s"#;
+
+    let script_path = std::env::temp_dir().join("inter-load-remove-cert.sh");
+    std::fs::write(&script_path, helper_script)
+        .map_err(|e| format!("Failed to write script: {}", e))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| format!("Failed to set permissions: {}", e))?;
+    }
+
+    std::process::Command::new("open")
+        .arg("-a")
+        .arg("Terminal")
+        .arg(&script_path)
+        .spawn()
+        .map_err(|e| format!("Failed to open Terminal: {}", e))?;
+
+    Ok("Terminal opened to remove CA cert. Enter your password there.".to_string())
+}
+
+#[tauri::command]
 fn open_system_proxy_settings() -> Result<String, String> {
     std::process::Command::new("open")
         .arg("x-apple.systempreferences:com.apple.Network-Settings.extension")
@@ -577,11 +614,32 @@ fn start_proxy_cmd(
         return Err("Proxy already running".to_string());
     }
 
-    // Generate CA cert if not present
+    // Load or generate CA cert (persisted to disk)
     {
         let has_cert = state.ca_cert_pem.lock().map_err(|e| e.to_string())?.is_some();
         if !has_cert {
-            let (cert_pem, key_pem) = generate_ca_cert()?;
+            let config_dir = dirs::data_local_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join("inter-load");
+            std::fs::create_dir_all(&config_dir).ok();
+            let cert_path = config_dir.join("ca-cert.pem");
+            let key_path = config_dir.join("ca-key.pem");
+
+            let (cert_pem, key_pem) = if cert_path.exists() && key_path.exists() {
+                // Load existing cert from disk
+                let c = std::fs::read_to_string(&cert_path)
+                    .map_err(|e| format!("Failed to read saved cert: {}", e))?;
+                let k = std::fs::read_to_string(&key_path)
+                    .map_err(|e| format!("Failed to read saved key: {}", e))?;
+                (c, k)
+            } else {
+                // Generate new cert and save to disk
+                let (c, k) = generate_ca_cert()?;
+                std::fs::write(&cert_path, &c).ok();
+                std::fs::write(&key_path, &k).ok();
+                (c, k)
+            };
+
             *state.ca_cert_pem.lock().map_err(|e| e.to_string())? = Some(cert_pem);
             *state.ca_key_pem.lock().map_err(|e| e.to_string())? = Some(key_pem);
         }
@@ -1113,7 +1171,7 @@ pub fn run() {
             toggle_forward_rule, get_auto_forward_logs, get_ws_status,
             export_payloads, write_export_file,
             get_proxy_status, get_proxy_traffic, clear_proxy_traffic,
-            get_ca_cert_pem, install_ca_cert, check_ca_cert_installed, start_proxy_cmd, stop_proxy_cmd,
+            get_ca_cert_pem, install_ca_cert, check_ca_cert_installed, remove_ca_cert, start_proxy_cmd, stop_proxy_cmd,
             open_system_proxy_settings, set_system_proxy, disable_system_proxy,
         ])
         .run(tauri::generate_context!())

@@ -186,6 +186,13 @@
     } catch (e) { error = String(e); }
   }
 
+  async function removeCaCert() {
+    try {
+      error = await invoke<string>("remove_ca_cert");
+      caCertInstalled = false;
+    } catch (e) { error = String(e); }
+  }
+
   async function fetchCaCert() {
     try {
       caCertPem = await invoke<string>("get_ca_cert_pem");
@@ -768,6 +775,9 @@
           Install CA Cert
         {/if}
       </button>
+      {#if caCertInstalled}
+        <button class="btn btn-danger btn-small" onclick={removeCaCert}>Remove CA Cert</button>
+      {/if}
       <button class="btn btn-outline btn-small" onclick={fetchCaCert}>Show CA Cert</button>
       <button class="btn btn-danger btn-small" onclick={clearProxyTraffic} disabled={proxyTraffic.length === 0}>Clear</button>
     </div>
