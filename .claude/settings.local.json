@@ -5,7 +5,13 @@
       "Bash(cargo build *)",
       "Bash(mkdir -p /Users/watchakorn.b/FILE_CODE/code_WK/inter-load/.claude/skills)",
       "Bash(npm install *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(brew list *)",
+      "Bash(bun add *)",
+      "Bash(rsvg-convert -w 32 -h 32 ../../logo.svg -o 32x32.png)",
+      "Bash(rsvg-convert -w 128 -h 128 ../../logo.svg -o 128x128.png)",
+      "Bash(rsvg-convert -w 256 -h 256 ../../logo.svg -o 128x128@2x.png)",
+      "Bash(rsvg-convert -w 512 -h 512 ../../logo.svg -o icon.png)"
     ],
     "additionalDirectories": [
       "/Users/watchakorn.b/FILE_CODE/code_WK/inter-load/.claude"

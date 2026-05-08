@@ -5,6 +5,7 @@ use axum::response::Json;
 use axum::Router;
 use axum::routing::{any, get};
 use chrono::{DateTime, Utc};
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use uuid::Uuid;
@@ -19,6 +20,7 @@ pub struct PayloadEntry {
     pub body: String,
     pub content_type: Option<String>,
     pub received_at: DateTime<Utc>,
+    pub source_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,12 +29,32 @@ pub struct AppServerState {
     pub running: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoForwardLog {
+    pub payload_id: String,
+    pub rule_id: String,
+    pub rule_name: String,
+    pub status: u16,
+    pub body: String,
+    pub duration_ms: u64,
+    pub forwarded_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WsStatus {
+    pub active_connections: u32,
+    pub total_messages: u64,
+}
+
 pub struct AppState {
     pub payloads: Mutex<Vec<PayloadEntry>>,
     pub server_port: Mutex<u16>,
     pub webhook_path: Mutex<String>,
     pub shutdown_tx: Mutex<Option<tokio::sync::watch::Sender<bool>>>,
     pub forward_rules: Mutex<Vec<ForwardRule>>,
+    pub auto_forward_logs: Mutex<Vec<AutoForwardLog>>,
+    pub ws_connections: Mutex<u32>,
+    pub ws_total_messages: Mutex<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +72,7 @@ pub struct ForwardRule {
     pub method: String,
     pub mappings: Vec<MapEntry>,
     pub headers: HashMap<String, String>,
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,6 +117,7 @@ fn send_test_payload(
         body,
         content_type,
         received_at: Utc::now(),
+        source_type: "http".to_string(),
     };
 
     let mut payloads = state.payloads.lock().map_err(|e| e.to_string())?;
@@ -195,6 +219,7 @@ fn save_forward_rule(
     method: String,
     mappings: Vec<MapEntry>,
     headers: HashMap<String, String>,
+    enabled: Option<bool>,
 ) -> Result<ForwardRule, String> {
     let rule = ForwardRule {
         id: Uuid::new_v4().to_string(),
@@ -203,6 +228,7 @@ fn save_forward_rule(
         method,
         mappings,
         headers,
+        enabled: enabled.unwrap_or(true),
     };
     let mut rules = state.forward_rules.lock().map_err(|e| e.to_string())?;
     rules.push(rule.clone());
@@ -223,6 +249,78 @@ fn delete_forward_rule(
     let mut rules = state.forward_rules.lock().map_err(|e| e.to_string())?;
     rules.retain(|r| r.id != id);
     Ok(())
+}
+
+#[tauri::command]
+fn toggle_forward_rule(
+    state: tauri::State<'_, Arc<AppState>>,
+    id: String,
+) -> Result<(), String> {
+    let mut rules = state.forward_rules.lock().map_err(|e| e.to_string())?;
+    if let Some(rule) = rules.iter_mut().find(|r| r.id == id) {
+        rule.enabled = !rule.enabled;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_auto_forward_logs(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<AutoForwardLog>, String> {
+    let logs = state.auto_forward_logs.lock().map_err(|e| e.to_string())?;
+    Ok(logs.clone())
+}
+
+#[tauri::command]
+fn get_ws_status(state: tauri::State<'_, Arc<AppState>>) -> Result<WsStatus, String> {
+    let connections = *state.ws_connections.lock().map_err(|e| e.to_string())?;
+    let total = *state.ws_total_messages.lock().map_err(|e| e.to_string())?;
+    Ok(WsStatus { active_connections: connections, total_messages: total })
+}
+
+#[tauri::command]
+fn export_payloads(
+    state: tauri::State<'_, Arc<AppState>>,
+    format: String,
+    payload_ids: Option<Vec<String>>,
+) -> Result<String, String> {
+    let payloads = state.payloads.lock().map_err(|e| e.to_string())?;
+
+    let selected: Vec<&PayloadEntry> = match payload_ids {
+        Some(ids) => payloads.iter().filter(|p| ids.contains(&p.id)).collect(),
+        None => payloads.iter().collect(),
+    };
+
+    match format.as_str() {
+        "json" => {
+            serde_json::to_string_pretty(&selected)
+                .map_err(|e| format!("JSON export error: {}", e))
+        }
+        "csv" => {
+            let mut wtr = csv::Writer::from_writer(Vec::new());
+            wtr.write_record(["id", "method", "path", "source_ip", "body", "content_type", "received_at", "source_type"])
+                .map_err(|e| format!("CSV header error: {}", e))?;
+            for p in &selected {
+                wtr.write_record([
+                    &p.id,
+                    &p.method,
+                    &p.path,
+                    &p.source_ip,
+                    &p.body,
+                    p.content_type.as_deref().unwrap_or(""),
+                    &p.received_at.to_rfc3339(),
+                    &p.source_type,
+                ]).map_err(|e| format!("CSV row error: {}", e))?;
+            }
+            let bytes = wtr.into_inner().map_err(|e| format!("CSV flush: {}", e))?;
+            String::from_utf8(bytes).map_err(|e| format!("CSV utf8: {}", e))
+        }
+        _ => Err("Unsupported format. Use 'json' or 'csv'.".into()),
+    }
+}
+
+#[tauri::command]
+fn write_export_file(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, &content)
+        .map_err(|e| format!("Failed to write file: {}", e))
 }
 
 async fn handle_webhook(
@@ -259,21 +357,176 @@ async fn handle_webhook(
         path,
         source_ip,
         headers,
-        body,
+        body: body.clone(),
         content_type,
         received_at: Utc::now(),
+        source_type: "http".to_string(),
     };
+
+    let payload_id = entry.id.clone();
 
     if let Ok(mut payloads) = shared.payloads.lock() {
         payloads.insert(0, entry);
         payloads.truncate(500);
     }
 
+    // Auto-forward to enabled rules
+    let rules = shared.forward_rules.lock().unwrap();
+    let enabled_rules: Vec<_> = rules.iter().filter(|r| r.enabled).cloned().collect();
+    drop(rules);
+
+    for rule in enabled_rules {
+        let mapped_body = build_auto_mapped_body(&body, &rule.mappings);
+        let shared_clone = shared.clone();
+        let payload_id = payload_id.clone();
+        let rule_id = rule.id.clone();
+        let rule_name = rule.name.clone();
+        tokio::spawn(async move {
+            let result = auto_forward_request(
+                rule.target_url, rule.method, mapped_body, rule.headers,
+            ).await;
+            if let Ok(fwd_result) = result {
+                let log = AutoForwardLog {
+                    payload_id,
+                    rule_id,
+                    rule_name,
+                    status: fwd_result.status,
+                    body: fwd_result.body,
+                    duration_ms: fwd_result.duration_ms,
+                    forwarded_at: Utc::now(),
+                };
+                if let Ok(mut logs) = shared_clone.auto_forward_logs.lock() {
+                    logs.insert(0, log);
+                    logs.truncate(500);
+                }
+            }
+        });
+    }
+
     Json(serde_json::json!({ "status": "ok", "message": "payload received" }))
+}
+
+fn build_auto_mapped_body(source_body: &str, mappings: &[MapEntry]) -> String {
+    let source: serde_json::Value = match serde_json::from_str(source_body) {
+        Ok(v) => v,
+        Err(_) => return "{}".to_string(),
+    };
+    let source_obj = match source.as_object() {
+        Some(o) => o,
+        None => return "{}".to_string(),
+    };
+    let mut output = serde_json::Map::new();
+    for m in mappings {
+        if !m.enabled || m.source_key.is_empty() || m.target_key.is_empty() {
+            continue;
+        }
+        if let Some(val) = source_obj.get(&m.source_key) {
+            output.insert(m.target_key.clone(), val.clone());
+        }
+    }
+    serde_json::Value::Object(output).to_string()
+}
+
+async fn auto_forward_request(
+    target_url: String,
+    method: String,
+    body: String,
+    headers: HashMap<String, String>,
+) -> Result<ForwardResult, String> {
+    let client = reqwest::Client::new();
+    let start = std::time::Instant::now();
+    let parsed: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+    let mut req = match method.to_uppercase().as_str() {
+        "POST" => client.post(&target_url),
+        "PUT" => client.put(&target_url),
+        "PATCH" => client.patch(&target_url),
+        "DELETE" => client.delete(&target_url),
+        _ => client.post(&target_url),
+    };
+    req = req.json(&parsed);
+    for (k, v) in &headers {
+        req = req.header(k.as_str(), v.as_str());
+    }
+    let resp = req.send().await.map_err(|e| e.to_string())?;
+    let status = resp.status().as_u16();
+    let resp_body = resp.text().await.unwrap_or_default();
+    Ok(ForwardResult {
+        status,
+        body: resp_body,
+        duration_ms: start.elapsed().as_millis() as u64,
+    })
 }
 
 async fn health_check() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "status": "ok", "service": "inter-load-webhook" }))
+}
+
+async fn handle_websocket(
+    State(shared): State<Arc<AppState>>,
+    ws: axum::extract::WebSocketUpgrade,
+) -> axum::response::Response {
+    ws.on_upgrade(move |socket| handle_ws_socket(socket, shared))
+}
+
+async fn handle_ws_socket(socket: axum::extract::ws::WebSocket, shared: Arc<AppState>) {
+    {
+        let mut count = shared.ws_connections.lock().unwrap();
+        *count += 1;
+    }
+
+    let mut socket = socket;
+    while let Some(msg) = socket.next().await {
+        match msg {
+            Ok(axum::extract::ws::Message::Text(text)) => {
+                let entry = PayloadEntry {
+                    id: Uuid::new_v4().to_string(),
+                    method: "WS".to_string(),
+                    path: "/ws".to_string(),
+                    source_ip: "websocket".to_string(),
+                    headers: HashMap::new(),
+                    body: text.to_string(),
+                    content_type: Some("text/plain".to_string()),
+                    received_at: Utc::now(),
+                    source_type: "websocket".to_string(),
+                };
+                if let Ok(mut payloads) = shared.payloads.lock() {
+                    payloads.insert(0, entry);
+                    payloads.truncate(500);
+                }
+                if let Ok(mut total) = shared.ws_total_messages.lock() {
+                    *total += 1;
+                }
+            }
+            Ok(axum::extract::ws::Message::Binary(data)) => {
+                let entry = PayloadEntry {
+                    id: Uuid::new_v4().to_string(),
+                    method: "WS".to_string(),
+                    path: "/ws".to_string(),
+                    source_ip: "websocket".to_string(),
+                    headers: HashMap::new(),
+                    body: format!("[Binary {} bytes]", data.len()),
+                    content_type: Some("application/octet-stream".to_string()),
+                    received_at: Utc::now(),
+                    source_type: "websocket".to_string(),
+                };
+                if let Ok(mut payloads) = shared.payloads.lock() {
+                    payloads.insert(0, entry);
+                    payloads.truncate(500);
+                }
+                if let Ok(mut total) = shared.ws_total_messages.lock() {
+                    *total += 1;
+                }
+            }
+            Ok(axum::extract::ws::Message::Close(_)) => break,
+            Err(_) => break,
+            _ => {}
+        }
+    }
+
+    {
+        let mut count = shared.ws_connections.lock().unwrap();
+        *count = count.saturating_sub(1);
+    }
 }
 
 fn start_server_bg(shared: Arc<AppState>, port: u16, webhook_path: String) {
@@ -294,6 +547,7 @@ fn start_server_bg(shared: Arc<AppState>, port: u16, webhook_path: String) {
             let router = Router::new()
                 .route(base, any(handle_webhook))
                 .route(&sub, any(handle_webhook))
+                .route("/ws", get(handle_websocket))
                 .route("/health", get(health_check))
                 .with_state(app_state);
 
@@ -325,11 +579,15 @@ pub fn run() {
         webhook_path: Mutex::new("/webhook".to_string()),
         shutdown_tx: Mutex::new(None),
         forward_rules: Mutex::new(Vec::new()),
+        auto_forward_logs: Mutex::new(Vec::new()),
+        ws_connections: Mutex::new(0),
+        ws_total_messages: Mutex::new(0),
     });
 
     let shared_clone = shared.clone();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(shared)
         .setup(move |_app| {
             start_server_bg(shared_clone, 3030, "/webhook".to_string());
@@ -346,6 +604,11 @@ pub fn run() {
             save_forward_rule,
             get_forward_rules,
             delete_forward_rule,
+            toggle_forward_rule,
+            get_auto_forward_logs,
+            get_ws_status,
+            export_payloads,
+            write_export_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
