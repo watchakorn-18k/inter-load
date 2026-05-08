@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inter-Load — Desktop Webhook Inspector & Forwarder</title>
+  <meta name="description" content="Intercept, inspect, and forward incoming webhook payloads in real-time. A desktop app built with Tauri v2 + SvelteKit + Rust.">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    :root{
+      --teal:#10B7C4;--teal-light:#08D0C2;--navy:#061E4D;--navy-light:#082B63;
+      --bg:#F8FAFB;--text:#1a1a2e;--text-light:#5a6070;--white:#fff;--border:#e2e8f0;
+    }
+    html{scroll-behavior:smooth}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--text);background:var(--bg);line-height:1.7}
+    a{color:var(--teal);text-decoration:none}
+    .container{max-width:1120px;margin:0 auto;padding:0 24px}
+
+    /* Nav */
+    nav{position:sticky;top:0;z-index:100;background:rgba(248,250,251,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+    nav .container{display:flex;align-items:center;justify-content:space-between;height:64px}
+    nav .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:1.2rem;color:var(--navy)}
+    nav .logo svg{width:32px;height:32px}
+    nav .links{display:flex;gap:28px;font-size:.95rem;font-weight:500}
+    nav .links a{color:var(--text-light);transition:color .2s}
+    nav .links a:hover{color:var(--teal)}
+
+    /* Hero */
+    .hero{padding:100px 0 80px;text-align:center;background:linear-gradient(180deg,var(--white) 0%,var(--bg) 100%)}
+    .hero h1{font-size:clamp(2.4rem,5vw,3.8rem);font-weight:800;letter-spacing:-.02em;line-height:1.15;margin-bottom:20px}
+    .hero h1 span{background:linear-gradient(135deg,var(--teal),var(--teal-light));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .hero p{font-size:1.2rem;color:var(--text-light);max-width:600px;margin:0 auto 40px}
+    .hero .badges{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-bottom:48px}
+    .hero .badges span{background:var(--white);border:1px solid var(--border);border-radius:20px;padding:6px 16px;font-size:.85rem;font-weight:500;color:var(--text-light)}
+    .hero .cta-group{display:flex;justify-content:center;gap:16px;flex-wrap:wrap}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:14px 32px;border-radius:12px;font-size:1rem;font-weight:600;border:none;cursor:pointer;transition:transform .15s,box-shadow .15s}
+    .btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(16,183,196,.25)}
+    .btn-primary{background:linear-gradient(135deg,var(--teal),var(--teal-light));color:var(--white)}
+    .btn-secondary{background:var(--white);color:var(--navy);border:1px solid var(--border)}
+
+    /* Screenshot */
+    .screenshot{max-width:900px;margin:0 auto;padding:0 24px 80px}
+    .screenshot img{width:100%;border-radius:16px;box-shadow:0 20px 60px rgba(6,30,77,.12);border:1px solid var(--border)}
+
+    /* Features */
+    .features{padding:80px 0;background:var(--white)}
+    .features h2{text-align:center;font-size:2rem;font-weight:700;margin-bottom:48px}
+    .features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px}
+    .feature-card{padding:32px;border-radius:16px;border:1px solid var(--border);transition:border-color .2s}
+    .feature-card:hover{border-color:var(--teal)}
+    .feature-icon{width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,var(--teal),var(--teal-light));display:flex;align-items:center;justify-content:center;margin-bottom:16px;color:var(--white);font-size:1.4rem}
+    .feature-card h3{font-size:1.15rem;font-weight:600;margin-bottom:8px}
+    .feature-card p{color:var(--text-light);font-size:.95rem}
+
+    /* How it works */
+    .how{padding:80px 0}
+    .how h2{text-align:center;font-size:2rem;font-weight:700;margin-bottom:48px}
+    .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:32px;counter-reset:step}
+    .step{text-align:center}
+    .step::before{counter-increment:step;content:counter(step);display:flex;align-items:center;justify-content:center;width:48px;height:48px;margin:0 auto 16px;border-radius:50%;background:linear-gradient(135deg,var(--teal),var(--teal-light));color:var(--white);font-size:1.3rem;font-weight:700}
+    .step h3{font-size:1.05rem;font-weight:600;margin-bottom:6px}
+    .step p{color:var(--text-light);font-size:.9rem}
+
+    /* Download */
+    .download{padding:80px 0;background:var(--white)}
+    .download h2{text-align:center;font-size:2rem;font-weight:700;margin-bottom:12px}
+    .download>p{text-align:center;color:var(--text-light);margin-bottom:48px}
+    .download-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px}
+    .download-card{padding:32px;border-radius:16px;border:1px solid var(--border);text-align:center}
+    .download-card .os-icon{font-size:2.4rem;margin-bottom:12px}
+    .download-card h3{font-size:1.15rem;font-weight:600;margin-bottom:8px}
+    .download-card .arch{font-size:.85rem;color:var(--text-light);margin-bottom:16px}
+    .download-card .dl-links{display:flex;flex-direction:column;gap:8px}
+    .download-card .dl-link{display:inline-block;padding:10px 20px;border-radius:8px;font-size:.9rem;font-weight:600;transition:background .2s}
+    .download-card .dl-link.primary{background:linear-gradient(135deg,var(--teal),var(--teal-light));color:var(--white)}
+    .download-card .dl-link.primary:hover{opacity:.9}
+    .download-card .dl-link.secondary{background:var(--bg);color:var(--text)}
+    .download-card .dl-link.secondary:hover{background:var(--border)}
+    .download-card .note{font-size:.8rem;color:var(--text-light);margin-top:12px}
+
+    /* Tech stack */
+    .tech{padding:80px 0;text-align:center}
+    .tech h2{font-size:2rem;font-weight:700;margin-bottom:40px}
+    .tech-badges{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
+    .tech-badges span{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:10px 20px;font-weight:600;font-size:.95rem}
+
+    /* Footer */
+    footer{padding:40px 0;border-top:1px solid var(--border);text-align:center;color:var(--text-light);font-size:.9rem}
+    footer a{font-weight:600}
+
+    @media(max-width:640px){
+      nav .links{display:none}
+      .hero{padding:60px 0 50px}
+      .hero h1{font-size:2rem}
+      .hero p{font-size:1rem}
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <div class="logo">
+      <svg viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="352" y="292" width="360" height="440" rx="38" fill="#061E4D"/>
+        <rect x="383" y="374" width="298" height="316" rx="8" fill="#fff"/>
+        <path d="M86 441H362" stroke="#10B7C4" stroke-width="23" stroke-linecap="round"/>
+        <path d="M86 512H360" stroke="#10B7C4" stroke-width="23" stroke-linecap="round"/>
+        <path d="M86 583H362" stroke="#10B7C4" stroke-width="23" stroke-linecap="round"/>
+        <path d="M347 435L455 512L347 589V547H214C204 547 196 539 196 529V495C196 485 204 477 214 477H347V435Z" fill="#10B7C4"/>
+        <path d="M863 512H930" stroke="#10B7C4" stroke-width="22" stroke-linecap="round"/>
+        <path d="M906 471L947 512L906 553" stroke="#10B7C4" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Inter-Load
+    </div>
+    <div class="links">
+      <a href="#features">Features</a>
+      <a href="#how">How It Works</a>
+      <a href="#download">Download</a>
+      <a href="https://github.com/watchakorn-18k/inter-load" target="_blank">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="container">
+    <h1><span>Intercept.</span> Inspect.<br>Forward.</h1>
+    <p>Desktop webhook inspector & forwarder that captures incoming payloads in real-time. See everything, transform anything, forward anywhere.</p>
+    <div class="badges">
+      <span>macOS</span>
+      <span>Windows</span>
+      <span>Linux</span>
+      <span>Tauri v2</span>
+      <span>SvelteKit 5</span>
+      <span>Rust</span>
+    </div>
+    <div class="cta-group">
+      <a href="#download" class="btn btn-primary">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download
+      </a>
+      <a href="https://github.com/watchakorn-18k/inter-load" target="_blank" class="btn btn-secondary">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12 24 5.37 18.63 0 12 0z"/></svg>
+        View Source
+      </a>
+    </div>
+  </div>
+</section>
+
+<div class="screenshot">
+  <img src="../screens/image.png" alt="Inter-Load Screenshot">
+</div>
+
+<section class="features" id="features">
+  <div class="container">
+    <h2>What Can Inter-Load Do?</h2>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        <h3>Capture All Webhooks</h3>
+        <p>Runs a local HTTP server that accepts GET, POST, PUT, PATCH, DELETE — receives everything, no questions asked. Configurable port and path.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+        <h3>Full Payload Inspection</h3>
+        <p>See HTTP method, path, source IP, headers, and body with Pretty/Minified/Raw toggle. JSON auto-formatted for readability.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </div>
+        <h3>Visual Mapper & Forward</h3>
+        <p>Remap payload keys, add custom headers, preview before sending, and forward to any endpoint with your chosen HTTP method.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        </div>
+        <h3>Save & Reuse Rules</h3>
+        <p>Save forward rules for reuse. Auto-forward matching payloads without manual triggers — set it and forget it.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        </div>
+        <h3>Export Payloads</h3>
+        <p>Export captured payloads as JSON or CSV for further analysis, sharing, or integration with other tools.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+        </div>
+        <h3>Dark & Light Theme</h3>
+        <p>Toggle between dark and light modes. Your eyes, your choice. Also supports WebSocket interception.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="how" id="how">
+  <div class="container">
+    <h2>How It Works</h2>
+    <div class="steps">
+      <div class="step">
+        <h3>Start the App</h3>
+        <p>Inter-Load starts a local HTTP server on port 3030 (configurable) ready to receive webhooks.</p>
+      </div>
+      <div class="step">
+        <h3>Point Your Webhook</h3>
+        <p>Set your third-party service's webhook URL to <code>http://your-ip:3030/webhook</code> using ngrok or similar tunnel.</p>
+      </div>
+      <div class="step">
+        <h3>Inspect & Debug</h3>
+        <p>Payloads appear instantly in the UI with full headers, body, and metadata. Filter and search through them.</p>
+      </div>
+      <div class="step">
+        <h3>Forward Anywhere</h3>
+        <p>Remap keys, add headers, and forward the transformed payload to your actual API endpoint.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="download" id="download">
+  <div class="container">
+    <h2>Download Inter-Load</h2>
+    <p>Free & open source. Available for all major platforms.</p>
+    <div class="download-grid">
+      <div class="download-card">
+        <div class="os-icon">&#63743;</div>
+        <h3>macOS</h3>
+        <p class="arch">Apple Silicon (M1/M2/M3/M4) & Intel</p>
+        <div class="dl-links">
+          <a href="https://github.com/watchakorn-18k/inter-load/releases/latest" class="dl-link primary">Download for macOS</a>
+        </div>
+        <p class="note">Opens .dmg — drag to Applications.<br>If "damaged" warning appears, run:<br><code>xattr -cr /Applications/inter-load.app</code></p>
+      </div>
+      <div class="download-card">
+        <div class="os-icon">&#8862;</div>
+        <h3>Windows</h3>
+        <p class="arch">x64 (.msi installer)</p>
+        <div class="dl-links">
+          <a href="https://github.com/watchakorn-18k/inter-load/releases/latest" class="dl-link primary">Download for Windows</a>
+        </div>
+        <p class="note">Run the .msi installer.<br>If SmartScreen warns, click "More info" → "Run anyway".</p>
+      </div>
+      <div class="download-card">
+        <div class="os-icon">&#9881;</div>
+        <h3>Linux</h3>
+        <p class="arch">x64 (.AppImage & .deb)</p>
+        <div class="dl-links">
+          <a href="https://github.com/watchakorn-18k/inter-load/releases/latest" class="dl-link primary">Download for Linux</a>
+        </div>
+        <p class="note">AppImage: <code>chmod +x && ./inter-load</code><br>.deb: <code>sudo dpkg -i inter-load.deb</code></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="tech">
+  <div class="container">
+    <h2>Built With</h2>
+    <div class="tech-badges">
+      <span>Tauri v2</span>
+      <span>SvelteKit 5</span>
+      <span>Rust</span>
+      <span>Axum</span>
+      <span>TypeScript</span>
+      <span>Reqwest</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>Open source under MIT License &mdash; <a href="https://github.com/watchakorn-18k/inter-load">View on GitHub</a></p>
+    <p style="margin-top:8px;opacity:.6">Intercept the load. Understand the flow.</p>
+  </div>
+</footer>
+
+</body>
+</html>

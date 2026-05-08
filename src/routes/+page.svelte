@@ -62,6 +62,34 @@
   // WebSocket
   let wsStatus = $state<WsStatus>({ active_connections: 0, total_messages: 0 });
 
+  // Proxy
+  interface ProxyTrafficEntry {
+    id: string; method: string; url: string; host: string; scheme: string; path: string;
+    request_headers: Record<string, string>; request_body: string;
+    response_status: number | null; response_headers: Record<string, string> | null; response_body: string | null;
+    started_at: string; completed_at: string | null; duration_ms: number | null;
+  }
+  interface ProxyStatus { running: boolean; port: number; }
+  let activeTab = $state<"webhook" | "proxy">("webhook");
+  let proxyStatus = $state<ProxyStatus>({ running: false, port: 8080 });
+  let proxyPort = $state("8080");
+  let proxyTraffic = $state<ProxyTrafficEntry[]>([]);
+  let proxyExpandedIds = $state<Set<string>>(new Set());
+  let proxyFilter = $state("");
+  let caCertPem = $state("");
+  let showCaCert = $state(false);
+
+  let filteredProxyTraffic = $derived(() => {
+    if (!proxyFilter.trim()) return proxyTraffic;
+    const q = proxyFilter.toLowerCase().trim();
+    return proxyTraffic.filter(t =>
+      t.url.toLowerCase().includes(q) ||
+      t.host.toLowerCase().includes(q) ||
+      t.request_body.toLowerCase().includes(q) ||
+      t.method.toLowerCase().includes(q)
+    );
+  });
+
   let filteredPayloads = $derived(() => {
     let result = payloads;
     if (filterMethod !== "ALL") {
@@ -116,6 +144,63 @@
 
   async function fetchWsStatus() {
     try { wsStatus = await invoke<WsStatus>("get_ws_status"); } catch { /* noop */ }
+  }
+
+  async function fetchProxyStatus() {
+    try { proxyStatus = await invoke<ProxyStatus>("get_proxy_status"); } catch { /* noop */ }
+  }
+
+  async function fetchProxyTraffic() {
+    try { proxyTraffic = await invoke<ProxyTrafficEntry[]>("get_proxy_traffic"); } catch { /* noop */ }
+  }
+
+  async function startProxy() {
+    const port = parseInt(proxyPort, 10);
+    if (isNaN(port) || port < 1 || port > 65535) { error = "Proxy port must be 1-65535"; return; }
+    try {
+      proxyStatus = await invoke<ProxyStatus>("start_proxy_cmd", { port });
+    } catch (e) { error = String(e); }
+  }
+
+  async function stopProxy() {
+    try { proxyStatus = await invoke<ProxyStatus>("stop_proxy_cmd"); } catch (e) { error = String(e); }
+  }
+
+  async function clearProxyTraffic() {
+    try { await invoke("clear_proxy_traffic"); proxyTraffic = []; } catch (e) { error = String(e); }
+  }
+
+  async function fetchCaCert() {
+    try {
+      caCertPem = await invoke<string>("get_ca_cert_pem");
+      showCaCert = true;
+    } catch (e) { error = String(e); }
+  }
+
+  async function exportCaCert() {
+    try {
+      const pem = await invoke<string>("get_ca_cert_pem");
+      const filePath = await save({
+        defaultPath: "inter-load-ca.pem",
+        filters: [{ name: "PEM", extensions: ["pem", "crt", "cer"] }],
+      });
+      if (filePath) {
+        await invoke("write_export_file", { path: filePath, content: pem });
+      }
+    } catch (e) { error = String(e); }
+  }
+
+  function toggleProxyExpand(id: string) {
+    const next = new Set(proxyExpandedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    proxyExpandedIds = next;
+  }
+
+  function proxyStatusColor(status: number | null): string {
+    if (!status) return "var(--text-dim)";
+    if (status < 300) return "var(--green)";
+    if (status < 400) return "var(--orange)";
+    return "var(--red)";
   }
 
   async function changeServerConfig() {
@@ -290,7 +375,7 @@
     const saved = localStorage.getItem("inter-load-theme");
     if (saved === "light" || saved === "dark") theme = saved;
 
-    fetchPayloads(); fetchStatus(); fetchForwardRules(); fetchAutoForwardLogs(); fetchWsStatus();
+    fetchPayloads(); fetchStatus(); fetchForwardRules(); fetchAutoForwardLogs(); fetchWsStatus(); fetchProxyStatus(); fetchProxyTraffic();
   });
 
   $effect(() => {
@@ -298,6 +383,7 @@
     if (autoRefresh) {
       pollInterval = setInterval(() => {
         fetchPayloads(); fetchAutoForwardLogs(); fetchWsStatus();
+        if (activeTab === "proxy") fetchProxyTraffic();
       }, 2000);
     }
     return () => { if (pollInterval) clearInterval(pollInterval); };
@@ -311,6 +397,13 @@
       <span class="badge" class:running={serverStatus.running} class:stopped={!serverStatus.running}>
         {serverStatus.running ? "Running" : "Stopped"}
       </span>
+      <div class="tab-switch">
+        <button class="tab-btn" class:active={activeTab === "webhook"} onclick={() => activeTab = "webhook"}>Webhook</button>
+        <button class="tab-btn" class:active={activeTab === "proxy"} onclick={() => { activeTab = "proxy"; fetchProxyTraffic(); }}>
+          Proxy
+          {#if proxyStatus.running}<span class="tab-dot"></span>{/if}
+        </button>
+      </div>
     </div>
     <div class="header-right">
       <button class="btn btn-outline btn-small theme-toggle" onclick={() => theme = theme === "dark" ? "light" : "dark"}>
@@ -365,7 +458,8 @@
 
   {#if error}<div class="error-bar">{error}</div>{/if}
 
-  <div class="content">
+  {#if activeTab === "webhook"}
+  <div class="toolbar">
     <div class="payload-list">
       {#if payloads.length === 0}
         <div class="empty-state">
@@ -597,6 +691,111 @@
       {/if}
     </aside>
   </div>
+  {:else}
+  <!-- Proxy Tab -->
+  <div class="proxy-toolbar">
+    <div class="toolbar-left">
+      <span class="proxy-badge" class:active={proxyStatus.running}>
+        {proxyStatus.running ? "Proxy Active" : "Proxy Off"}
+      </span>
+      <label class="port-label">Port:</label>
+      <input type="number" bind:value={proxyPort} min="1" max="65535" class="proxy-port-input" disabled={proxyStatus.running} />
+      {#if proxyStatus.running}
+        <button class="btn btn-danger btn-small" onclick={stopProxy}>Stop Proxy</button>
+      {:else}
+        <button class="btn btn-primary btn-small" onclick={startProxy}>Start Proxy</button>
+      {/if}
+    </div>
+    <div class="toolbar-right">
+      <button class="btn btn-outline btn-small" onclick={fetchProxyTraffic}>Refresh</button>
+      <button class="btn btn-outline btn-small" onclick={exportCaCert}>Export CA Cert</button>
+      <button class="btn btn-outline btn-small" onclick={fetchCaCert}>Show CA Cert</button>
+      <button class="btn btn-danger btn-small" onclick={clearProxyTraffic} disabled={proxyTraffic.length === 0}>Clear</button>
+    </div>
+  </div>
+
+  {#if showCaCert}
+    <div class="ca-cert-bar">
+      <pre class="ca-cert-pre">{caCertPem}</pre>
+      <button class="btn btn-small" onclick={() => showCaCert = false}>Close</button>
+    </div>
+  {/if}
+
+  <div class="proxy-info">
+    <span class="proxy-hint">Set system proxy to <code>127.0.0.1:{proxyPort}</code> to capture traffic. Install the CA cert to decrypt HTTPS.</span>
+    <input type="text" placeholder="Filter URL, host, body..." bind:value={proxyFilter} class="filter-input proxy-filter" />
+    <span class="filter-count">{filteredProxyTraffic().length} of {proxyTraffic.length}</span>
+  </div>
+
+  <div class="proxy-content">
+    {#if proxyTraffic.length === 0}
+      <div class="empty-state">
+        <div class="empty-icon">&#127760;</div>
+        <h3>No proxy traffic</h3>
+        <p>Start the proxy and set your system proxy to <code>127.0.0.1:{proxyPort}</code></p>
+        <p>Install the CA certificate to decrypt HTTPS traffic</p>
+      </div>
+    {:else}
+      <table class="proxy-table">
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>URL</th>
+            <th>Status</th>
+            <th>Time</th>
+            <th>Scheme</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each filteredProxyTraffic() as entry (entry.id)}
+            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+            <tr class="proxy-row" class:expanded={proxyExpandedIds.has(entry.id)} onclick={() => toggleProxyExpand(entry.id)}>
+              <td><span class="method-badge" style="background: {methodColor(entry.method)}">{entry.method}</span></td>
+              <td class="proxy-url">{entry.url.length > 80 ? entry.url.slice(0, 80) + "..." : entry.url}</td>
+              <td style="color: {proxyStatusColor(entry.response_status)}; font-weight: 700;">
+                {entry.response_status ?? "..."}
+              </td>
+              <td class="proxy-time">{entry.duration_ms != null ? entry.duration_ms + "ms" : "..."}</td>
+              <td><span class="scheme-tag" class:https={entry.scheme === "https"}>{entry.scheme.toUpperCase()}</span></td>
+            </tr>
+            {#if proxyExpandedIds.has(entry.id)}
+              <tr class="proxy-detail-row"><td colspan="5">
+                <div class="proxy-detail">
+                  <div class="pd-section">
+                    <h4>Request</h4>
+                    <div class="pd-headers">
+                      {#each Object.entries(entry.request_headers) as [k, v]}
+                        <div><span class="header-key">{k}:</span> <span class="header-value">{v}</span></div>
+                      {/each}
+                    </div>
+                    {#if entry.request_body}
+                      <pre class="pd-body">{entry.request_body.length > 3000 ? entry.request_body.slice(0, 3000) + "..." : entry.request_body}</pre>
+                    {/if}
+                  </div>
+                  {#if entry.response_status}
+                    <div class="pd-section">
+                      <h4>Response ({entry.response_status}) - {entry.duration_ms}ms</h4>
+                      {#if entry.response_headers}
+                        <div class="pd-headers">
+                          {#each Object.entries(entry.response_headers) as [k, v]}
+                            <div><span class="header-key">{k}:</span> <span class="header-value">{v}</span></div>
+                          {/each}
+                        </div>
+                      {/if}
+                      {#if entry.response_body}
+                        <pre class="pd-body">{entry.response_body.length > 3000 ? entry.response_body.slice(0, 3000) + "..." : entry.response_body}</pre>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+              </td></tr>
+            {/if}
+          {/each}
+        </tbody>
+      </table>
+    {/if}
+  </div>
+  {/if}
 </main>
 
 <style>
@@ -791,4 +990,49 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+  /* Tab switch */
+  .tab-switch { display: flex; gap: 2px; background: var(--bg-input); border-radius: 6px; padding: 2px; }
+  .tab-btn { padding: 4px 12px; border: none; border-radius: 4px; background: transparent; color: var(--text-dim); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 4px; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { background: var(--accent); color: #fff; }
+  .tab-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); display: inline-block; }
+
+  /* Proxy */
+  .proxy-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--bg-surface); flex-shrink: 0; }
+  .proxy-badge { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 10px; background: var(--bg-elevated); color: var(--text-dim); }
+  .proxy-badge.active { background: var(--green-soft); color: var(--green); }
+  .port-label { font-size: 12px; color: var(--text-dim); }
+  .proxy-port-input { padding: 4px 8px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-input); color: var(--text); font-size: 12px; width: 64px; outline: none; }
+  .proxy-port-input:focus { border-color: var(--accent); }
+
+  .proxy-info { display: flex; align-items: center; gap: 10px; padding: 6px 20px; border-bottom: 1px solid var(--border); background: var(--bg-surface); flex-shrink: 0; }
+  .proxy-hint { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+  .proxy-hint code { background: var(--bg-input); padding: 1px 5px; border-radius: 3px; font-size: 11px; color: var(--accent); border: 1px solid var(--border); }
+  .proxy-filter { flex: 1; }
+
+  .ca-cert-bar { display: flex; align-items: flex-start; gap: 10px; padding: 8px 20px; background: var(--bg-elevated); border-bottom: 1px solid var(--border); }
+  .ca-cert-pre { flex: 1; font-size: 10px; font-family: "SF Mono","Fira Code",Menlo,monospace; white-space: pre-wrap; word-break: break-all; color: var(--text-dim); background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; max-height: 120px; overflow-y: auto; margin: 0; }
+
+  .proxy-content { flex: 1; overflow-y: auto; padding: 0; background: var(--bg); }
+
+  .proxy-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .proxy-table th { position: sticky; top: 0; background: var(--bg-surface); font-size: 10px; color: var(--text-dim); text-transform: uppercase; font-weight: 600; text-align: left; padding: 6px 12px; border-bottom: 1px solid var(--border); letter-spacing: 0.5px; z-index: 1; }
+  .proxy-row { cursor: pointer; border-bottom: 1px solid var(--border); transition: background 0.1s; }
+  .proxy-row:hover { background: rgba(128,128,128,0.04); }
+  .proxy-row.expanded { background: var(--accent-soft); }
+  .proxy-row td { padding: 6px 12px; }
+  .proxy-url { font-family: "SF Mono","Fira Code",Menlo,monospace; font-size: 11px; color: var(--text); max-width: 500px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .proxy-time { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+  .scheme-tag { font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; background: var(--bg-elevated); color: var(--text-dim); text-transform: uppercase; }
+  .scheme-tag.https { background: rgba(91,156,246,0.12); color: var(--accent); }
+
+  .proxy-detail-row td { padding: 0 12px 12px; background: var(--bg-surface); }
+  .proxy-detail { padding: 10px; border: 1px solid var(--border-light); border-radius: var(--radius); background: var(--bg-input); }
+  .pd-section { margin-bottom: 10px; }
+  .pd-section:last-child { margin-bottom: 0; }
+  .pd-section h4 { font-size: 11px; color: var(--accent); margin-bottom: 6px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; }
+  .pd-headers { font-size: 11px; margin-bottom: 6px; }
+  .pd-headers div { padding: 2px 0; border-bottom: 1px solid var(--border); }
+  .pd-body { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; font-size: 11px; font-family: "SF Mono","Fira Code",Menlo,monospace; white-space: pre-wrap; word-break: break-all; color: var(--text-dim); max-height: 200px; overflow-y: auto; line-height: 1.5; margin: 0; }
 </style>

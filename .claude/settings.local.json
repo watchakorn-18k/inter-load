@@ -29,7 +29,27 @@
       "mcp__context7__query-docs",
       "WebSearch",
       "Bash(curl -s https://crates.io/api/v1/crates/hudsucker)",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f\\\\\"Latest: {d['crate']['max_version']}, Downloads: {d['crate']['downloads']}\\\\\"\\)\")"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f\\\\\"Latest: {d['crate']['max_version']}, Downloads: {d['crate']['downloads']}\\\\\"\\)\")",
+      "Bash(curl -s https://crates.io/api/v1/crates/rcgen)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f\\\\\"Latest: {d['crate']['max_version']}\\\\\"\\)\")",
+      "Bash(curl -s https://crates.io/api/v1/crates/networksetup)",
+      "Bash(curl -s https://crates.io/api/v1/crates/tokio-rustls)",
+      "Bash(git tag *)",
+      "Bash(git push *)",
+      "Bash(curl -s https://crates.io/api/v1/crates/hudsucker/0.24.1/dependencies)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(f\\\\\"{dep['crate_id']} {dep.get\\('req','?'\\)}\\\\\"\\) for dep in d.get\\('dependencies',[]\\)]\")",
+      "Bash(curl -s \"https://crates.io/api/v1/crates/networksetup\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d['crate'], indent=2\\)\\)\")",
+      "Bash(curl -s https://crates.io/api/v1/crates/sysproxy)",
+      "Bash(curl -s https://crates.io/api/v1/crates/sysproxy/0.3.0/dependencies)",
+      "Bash(security find-identity *)",
+      "Bash(openssl rand *)",
+      "Bash(security list-keychains *)",
+      "Bash(security find-certificate *)",
+      "Bash(security import *)",
+      "Bash(security export *)",
+      "Bash(codesign --force --deep --sign \"Apple Distribution: FAKDUAI LOGISTICS AND DIGITAL PLATFORM COMPANY LIMITED \\(A8XV47K2LQ\\)\" /tmp/test_sign)",
+      "Bash(gh repo *)"
     ],
     "additionalDirectories": [
       "/Users/watchakorn.b/FILE_CODE/code_WK/inter-load/.claude"

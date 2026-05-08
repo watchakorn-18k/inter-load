@@ -125,6 +125,42 @@ curl -X POST http://localhost:3030/webhook/github \
 - [x] Export payloads as JSON / CSV
 - [x] Dark / Light theme toggle
 - [x] WebSocket support
+- [x] HTTP/HTTPS MITM Proxy (capture all traffic)
+
+---
+
+## Download & Install
+
+Go to the [Releases page](https://github.com/watchakorn-18k/inter-load/releases) and download the latest version for your platform.
+
+### macOS
+
+1. Download `inter-load_aarch64-apple-darwin.dmg` (Apple Silicon M1/M2/M3/M4) or `inter-load_x86_64-apple-darwin.dmg` (Intel Mac)
+2. Open the `.dmg` file and drag **Inter-Load** into the **Applications** folder
+3. On first launch, if you see **"Inter-Load is damaged and can't be opened"**, run this in Terminal:
+   ```bash
+   xattr -cr /Applications/inter-load.app
+   ```
+4. Open the app normally after that
+
+### Windows
+
+1. Download `inter-load_x86_64-pc-windows-msvc.msi` or `inter-load_x86_64-pc-windows-msvc.exe`
+2. Run the installer and follow the setup wizard
+3. If Windows shows **"Windows protected your PC"**, click **More info** → **Run anyway**
+
+### Linux
+
+1. Download `inter-load_x86_64-unknown-linux-gnu.AppImage` (universal) or `inter-load_x86_64-unknown-linux-gnu.deb` (Debian/Ubuntu)
+2. **AppImage**: Make it executable and run:
+   ```bash
+   chmod +x inter-load_*.AppImage
+   ./inter-load_*.AppImage
+   ```
+3. **.deb**: Install with:
+   ```bash
+   sudo dpkg -i inter-load_*.deb
+   ```
 
 ---
 
