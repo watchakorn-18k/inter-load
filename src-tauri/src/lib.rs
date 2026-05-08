@@ -621,7 +621,9 @@ fn stop_proxy_cmd(state: tauri::State<'_, Arc<AppState>>) -> Result<ProxyStatus,
 // ── CA cert generation ──
 
 fn generate_ca_cert() -> Result<(String, String), String> {
-    let key_pair = KeyPair::generate().map_err(|e| format!("Key generation failed: {}", e))?;
+    use rcgen::{RsaKeySize, PKCS_RSA_SHA256};
+    let key_pair = KeyPair::generate_rsa_for(&PKCS_RSA_SHA256, RsaKeySize::_2048)
+        .map_err(|e| format!("RSA key generation failed: {}", e))?;
     let mut params = CertificateParams::default();
     params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
     params.distinguished_name.push(rcgen::DnType::CommonName, "Inter-Load CA");

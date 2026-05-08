@@ -598,7 +598,7 @@
                           <div class="rule-chip-wrapper">
                             <button class="rule-chip" class:disabled={!rule.enabled} onclick={() => applyRule(rule)}>
                               {rule.name} ({rule.method} {rule.target_url.replace(/^https?:\/\/[^/]+/, "...")})
-                              <span class="rule-delete" role="button" tabindex="-1" onclick={(e) => { e.stopPropagation(); deleteRule(rule.id); }}>x</span>
+                              <span class="rule-delete" role="button" tabindex="0" onclick={(e) => { e.stopPropagation(); deleteRule(rule.id); }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); deleteRule(rule.id); } }}>x</span>
                             </button>
                             <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
                             <span class="rule-toggle" class:active={rule.enabled} role="button" tabindex="-1" onclick={(e) => { e.stopPropagation(); toggleAutoForward(rule.id); }}>
@@ -746,8 +746,8 @@
       <span class="proxy-badge" class:active={proxyStatus.running}>
         {proxyStatus.running ? "Proxy Active" : "Proxy Off"}
       </span>
-      <label class="port-label">Port:</label>
-      <input type="number" bind:value={proxyPort} min="1" max="65535" class="proxy-port-input" disabled={proxyStatus.running} />
+      <label class="port-label" for="proxy-port">Port:</label>
+      <input id="proxy-port" type="number" bind:value={proxyPort} min="1" max="65535" class="proxy-port-input" disabled={proxyStatus.running} />
       {#if proxyStatus.running}
         <button class="btn btn-danger btn-small" onclick={stopProxy}>Stop Proxy</button>
       {:else}
@@ -923,7 +923,7 @@ python3 -c "import requests; print(requests.get('https://httpbin.org/get').json(
     --orange: #fb923c; --purple: #c084fc; --radius: 6px;
     --scrollbar-thumb: #2a2f3e; --scrollbar-thumb-hover: #7c849a;
   }
-  [data-theme="light"] {
+  :global([data-theme="light"]) {
     --bg: #f5f6fa; --bg-surface: #ffffff; --bg-elevated: #eef0f5; --bg-input: #f0f1f5;
     --border: #d8dbe5; --border-light: #c5c9d6; --text: #1a1d26; --text-dim: #5c6378;
     --accent: #3b7dd8; --accent-soft: rgba(59,125,216,0.08); --accent-hover: #2d6bc4;
@@ -979,7 +979,7 @@ python3 -c "import requests; print(requests.get('https://httpbin.org/get').json(
   .btn-danger { color: var(--red); border-color: rgba(248,113,113,0.25); }
   .btn-danger:hover { background: var(--red-soft); }
 
-  .content { display: flex; flex: 1; overflow: hidden; background: var(--bg); }
+  :global(.content) { display: flex; flex: 1; overflow: hidden; background: var(--bg); }
   .payload-list { flex: 1; overflow-y: auto; padding: 12px 16px; background: var(--bg); }
 
   .empty-state { text-align: center; padding: 40px 20px 40px; color: var(--text-dim); }
