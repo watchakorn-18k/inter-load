@@ -77,6 +77,7 @@
   let proxyExpandedIds = $state<Set<string>>(new Set());
   let proxyFilter = $state("");
   let showCurlExamples = $state(false);
+  let isPaused = $state(false);
   let caCertPem = $state("");
   let showCaCert = $state(false);
 
@@ -132,6 +133,7 @@
       newPort = String(serverStatus.port);
       webhookPath = await invoke<string>("get_webhook_path");
       newWebhookPath = webhookPath;
+      isPaused = await invoke<boolean>("get_paused");
     } catch (e) { error = String(e); }
   }
 
@@ -191,6 +193,10 @@
       error = await invoke<string>("remove_ca_cert");
       caCertInstalled = false;
     } catch (e) { error = String(e); }
+  }
+
+  async function togglePause() {
+    try { isPaused = await invoke<boolean>("toggle_paused"); } catch (e) { error = String(e); }
   }
 
   async function fetchCaCert() {
@@ -485,6 +491,9 @@
       {/if}
     </div>
     <div class="toolbar-right">
+      <button class="btn btn-small" onclick={togglePause} style:background={isPaused ? "var(--orange)" : "var(--bg-surface)"} style:color={isPaused ? "#fff" : "var(--text)"}>
+        {isPaused ? "Paused" : "Pause"}
+      </button>
       <label class="toggle-label"><input type="checkbox" bind:checked={autoRefresh} /> Auto</label>
       <button class="btn btn-outline btn-small" onclick={fetchPayloads}>Refresh</button>
       <button class="btn btn-outline btn-small" onclick={expandAll}>Expand All</button>
@@ -762,6 +771,9 @@
       {/if}
     </div>
     <div class="toolbar-right">
+      <button class="btn btn-small" onclick={togglePause} style:background={isPaused ? "var(--orange)" : "var(--bg-surface)"} style:color={isPaused ? "#fff" : "var(--text)"}>
+        {isPaused ? "Paused" : "Pause"}
+      </button>
       <button class="btn btn-outline btn-small" onclick={setSystemProxy} disabled={!proxyStatus.running}>Set System Proxy</button>
       <button class="btn btn-outline btn-small" onclick={disableSystemProxy}>Disable System Proxy</button>
       <button class="btn btn-outline btn-small" onclick={fetchProxyTraffic}>Refresh</button>

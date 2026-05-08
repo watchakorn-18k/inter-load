@@ -299,6 +299,18 @@ fn toggle_forward_rule(
 }
 
 #[tauri::command]
+fn toggle_paused(state: tauri::State<'_, Arc<AppState>>) -> Result<bool, String> {
+    let mut paused = state.paused.lock().map_err(|e| e.to_string())?;
+    *paused = !*paused;
+    Ok(*paused)
+}
+
+#[tauri::command]
+fn get_paused(state: tauri::State<'_, Arc<AppState>>) -> Result<bool, String> {
+    Ok(*state.paused.lock().map_err(|e| e.to_string())?)
+}
+
+#[tauri::command]
 fn get_auto_forward_logs(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<AutoForwardLog>, String> {
     let logs = state.auto_forward_logs.lock().map_err(|e| e.to_string())?;
     Ok(logs.clone())
@@ -750,12 +762,16 @@ impl HttpHandler for ProxyHandler {
                 duration_ms: None,
             };
 
-            if let Ok(mut traffic) = self.state.proxy_traffic.lock() {
-                traffic.insert(0, entry);
-                traffic.truncate(2000);
-            }
-            if let Ok(mut pending) = self.pending.lock() {
-                pending.insert(client_key, id);
+            if let Ok(paused) = self.state.paused.lock() {
+                if !*paused {
+                    if let Ok(mut traffic) = self.state.proxy_traffic.lock() {
+                        traffic.insert(0, entry);
+                        traffic.truncate(2000);
+                    }
+                    if let Ok(mut pending) = self.pending.lock() {
+                        pending.insert(client_key, id);
+                    }
+                }
             }
 
             return req.into();
@@ -785,12 +801,15 @@ impl HttpHandler for ProxyHandler {
             duration_ms: None,
         };
 
-        if let Ok(mut traffic) = self.state.proxy_traffic.lock() {
-            traffic.insert(0, entry);
-            traffic.truncate(2000);
-        }
-        if let Ok(mut pending) = self.pending.lock() {
-            pending.insert(client_key, id);
+        let is_paused = self.state.paused.lock().map(|p| *p).unwrap_or(false);
+        if !is_paused {
+            if let Ok(mut traffic) = self.state.proxy_traffic.lock() {
+                traffic.insert(0, entry);
+                traffic.truncate(2000);
+            }
+            if let Ok(mut pending) = self.pending.lock() {
+                pending.insert(client_key, id);
+            }
         }
 
         let mut new_req = HyperRequest::builder()
@@ -969,9 +988,13 @@ async fn handle_webhook(
 
     let payload_id = entry.id.clone();
 
-    if let Ok(mut payloads) = shared.payloads.lock() {
-        payloads.insert(0, entry);
-        payloads.truncate(500);
+    if let Ok(paused) = shared.paused.lock() {
+        if !*paused {
+            if let Ok(mut payloads) = shared.payloads.lock() {
+                payloads.insert(0, entry);
+                payloads.truncate(500);
+            }
+        }
     }
 
     let rules = shared.forward_rules.lock().unwrap();
@@ -1143,6 +1166,7 @@ pub fn run() {
         auto_forward_logs: Mutex::new(Vec::new()),
         ws_connections: Mutex::new(0),
         ws_total_messages: Mutex::new(0),
+        paused: Mutex::new(false),
         proxy_traffic: Mutex::new(Vec::new()),
         proxy_running: Mutex::new(false),
         proxy_port: Mutex::new(8080),
@@ -1169,6 +1193,7 @@ pub fn run() {
             get_server_status, get_webhook_path, restart_server,
             forward_mapped, save_forward_rule, get_forward_rules, delete_forward_rule,
             toggle_forward_rule, get_auto_forward_logs, get_ws_status,
+            toggle_paused, get_paused,
             export_payloads, write_export_file,
             get_proxy_status, get_proxy_traffic, clear_proxy_traffic,
             get_ca_cert_pem, install_ca_cert, check_ca_cert_installed, remove_ca_cert, start_proxy_cmd, stop_proxy_cmd,
