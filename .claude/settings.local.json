@@ -49,7 +49,27 @@
       "Bash(security import *)",
       "Bash(security export *)",
       "Bash(codesign --force --deep --sign \"Apple Distribution: FAKDUAI LOGISTICS AND DIGITAL PLATFORM COMPANY LIMITED \\(A8XV47K2LQ\\)\" /tmp/test_sign)",
-      "Bash(gh repo *)"
+      "Bash(gh repo *)",
+      "mcp__chrome-devtools__take_screenshot",
+      "Bash(curl -s http://127.0.0.1:1420)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -x http://127.0.0.1:8080 http://httpbin.org/get)",
+      "Bash(curl -s -x http://127.0.0.1:8080 http://httpbin.org/get)",
+      "Bash(curl -s -x http://127.0.0.1:8080 https://httpbin.org/get)",
+      "Bash(curl -sk -x http://127.0.0.1:8080 https://httpbin.org/get)",
+      "Bash(curl -v -x http://127.0.0.1:8080 https://httpbin.org/get)",
+      "Bash(# Check if the issue is that hudsucker::rcgen is re-exported differently *)",
+      "Read(//Users/watchakorn.b/.cargo/registry/src/**)",
+      "Bash(openssl x509 *)",
+      "Bash(openssl s_client -connect httpbin.org:443 -proxy 127.0.0.1:8080 -servername httpbin.org)",
+      "Bash(cat)",
+      "Bash(lsof -ti:1420)",
+      "Bash(lsof -ti:3030)",
+      "mcp__chrome-devtools__navigate_page",
+      "mcp__chrome-devtools__new_page",
+      "mcp__chrome-devtools__list_pages",
+      "Bash(lsof -ti:8080)",
+      "Bash(xargs kill)",
+      "Bash(cargo run *)"
     ],
     "additionalDirectories": [
       "/Users/watchakorn.b/FILE_CODE/code_WK/inter-load/.claude"

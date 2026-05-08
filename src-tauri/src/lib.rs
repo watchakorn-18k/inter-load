@@ -655,7 +655,11 @@ impl HttpHandler for ProxyHandler {
         let uri = req.uri().clone();
         let url = uri.to_string();
         let host = uri.host().unwrap_or("unknown").to_string();
-        let scheme = uri.scheme_str().unwrap_or("http").to_string();
+        let scheme = if method == hyper::Method::CONNECT {
+            "https".to_string()
+        } else {
+            uri.scheme_str().unwrap_or("http").to_string()
+        };
         let path = uri.path().to_string();
 
         let mut req_headers = HashMap::new();
@@ -665,16 +669,46 @@ impl HttpHandler for ProxyHandler {
             }
         }
 
-        // Collect body by consuming the request
+        let client_key = ctx.client_addr.to_string();
+        let id = Uuid::new_v4().to_string();
+
+        // CONNECT requests MUST be returned as-is to preserve the upgrade state.
+        // hudsucker handles the TLS MITM internally after we return.
+        if method == hyper::Method::CONNECT {
+            let entry = ProxyTrafficEntry {
+                id: id.clone(),
+                method: method.to_string(),
+                url,
+                host,
+                scheme,
+                path,
+                request_headers: req_headers,
+                request_body: String::new(),
+                response_status: None,
+                response_headers: None,
+                response_body: None,
+                started_at: Utc::now(),
+                completed_at: None,
+                duration_ms: None,
+            };
+
+            if let Ok(mut traffic) = self.state.proxy_traffic.lock() {
+                traffic.insert(0, entry);
+                traffic.truncate(2000);
+            }
+            if let Ok(mut pending) = self.pending.lock() {
+                pending.insert(client_key, id);
+            }
+
+            return req.into();
+        }
+
+        // For non-CONNECT: consume body, record, rebuild and return
         let (parts, body) = req.into_parts();
         let body_bytes = body.collect().await
             .map(|b| b.to_bytes())
             .unwrap_or_default();
-        let body_vec = body_bytes.to_vec();
-        let request_body = String::from_utf8_lossy(&body_vec).to_string();
-
-        let id = Uuid::new_v4().to_string();
-        let client_key = ctx.client_addr.to_string();
+        let request_body = String::from_utf8_lossy(&body_bytes).to_string();
 
         let entry = ProxyTrafficEntry {
             id: id.clone(),
@@ -701,7 +735,6 @@ impl HttpHandler for ProxyHandler {
             pending.insert(client_key, id);
         }
 
-        // Rebuild the request with the collected body
         let mut new_req = HyperRequest::builder()
             .method(method)
             .uri(uri);
@@ -1059,6 +1092,10 @@ pub fn run() {
         ca_cert_pem: Mutex::new(None),
         ca_key_pem: Mutex::new(None),
     });
+
+    tracing_subscriber::fmt()
+        .with_env_filter("hudsucker=error")
+        .init();
 
     let shared_clone = shared.clone();
     tauri::Builder::default()
