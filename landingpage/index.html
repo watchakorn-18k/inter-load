@@ -154,11 +154,14 @@
     footer{padding:40px 0;border-top:1px solid var(--border);text-align:center;color:var(--text-light);font-size:.9rem}
     footer a{font-weight:600}
 
+    code{background:var(--code-bg);padding:2px 6px;border-radius:4px;font-size:.85em}
+
     @media(max-width:640px){
       nav .links{display:none}
       .hero{padding:60px 0 50px}
       .hero h1{font-size:2rem}
       .hero p{font-size:1rem}
+      .theme-menu{right:-60px}
     }
   </style>
 </head>
@@ -368,6 +371,59 @@
     <p style="margin-top:8px;opacity:.6">Intercept the load. Understand the flow.</p>
   </div>
 </footer>
+
+<script>
+(function(){
+  const root = document.documentElement;
+  const toggle = document.getElementById('themeToggle');
+  const menu = document.getElementById('themeMenu');
+  const icon = document.getElementById('themeIcon');
+  const buttons = menu.querySelectorAll('button[data-mode]');
+  const sunPath = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+  const moonPath = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+  const monitorPath = '<rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>';
+
+  function getSystemTheme() {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function applyTheme(mode) {
+    const resolved = mode === 'system' ? getSystemTheme() : mode;
+    root.setAttribute('data-theme', resolved);
+    icon.innerHTML = mode === 'dark' ? moonPath : mode === 'system' ? monitorPath : sunPath;
+    buttons.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  }
+
+  function init() {
+    const saved = localStorage.getItem('theme') || 'system';
+    applyTheme(saved);
+  }
+
+  toggle.addEventListener('click', function(e) {
+    e.stopPropagation();
+    menu.classList.toggle('open');
+  });
+
+  document.addEventListener('click', function() {
+    menu.classList.remove('open');
+  });
+
+  buttons.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var mode = this.dataset.mode;
+      localStorage.setItem('theme', mode);
+      applyTheme(mode);
+      menu.classList.remove('open');
+    });
+  });
+
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
+    if ((localStorage.getItem('theme') || 'system') === 'system') applyTheme('system');
+  });
+
+  init();
+})();
+</script>
 
 </body>
 </html>
