@@ -236,10 +236,10 @@
     </div>
     <div class="header-right">
       <div class="port-config">
-        <label>Port:</label>
-        <input type="number" bind:value={newPort} min="1" max="65535" />
-        <label>Path:</label>
-        <input type="text" bind:value={newWebhookPath} />
+        <label for="port-input">Port:</label>
+        <input id="port-input" type="number" bind:value={newPort} min="1" max="65535" />
+        <label for="path-input">Path:</label>
+        <input id="path-input" type="text" bind:value={newWebhookPath} />
         <button class="btn btn-small" onclick={changeServerConfig} disabled={newPort === String(serverStatus.port) && newWebhookPath === webhookPath}>Apply</button>
       </div>
     </div>
@@ -277,7 +277,8 @@
           {@const viewMode = viewModes.get(payload.id) ?? "pretty"}
           {@const showForward = forwardPanelId === payload.id}
           <div class="payload-card" class:expanded={isExpanded}>
-            <div class="payload-header" onclick={() => toggleExpand(payload.id)}>
+            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+            <div class="payload-header" role="button" tabindex="0" onclick={() => toggleExpand(payload.id)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleExpand(payload.id); } }}>
               <div class="payload-meta">
                 <span class="method-badge" style="background: {methodColor(payload.method)}">{payload.method}</span>
                 <span class="payload-path">{payload.path}</span>
@@ -296,9 +297,11 @@
                 <div class="detail-section">
                   <div class="section-header"><h4>Headers ({Object.keys(payload.headers).length})</h4></div>
                   <table class="headers-table">
+                    <tbody>
                     {#each Object.entries(payload.headers) as [key, value]}
                       <tr><td class="header-key">{key}</td><td class="header-value">{value}</td></tr>
                     {/each}
+                    </tbody>
                   </table>
                 </div>
                 <div class="detail-section">
@@ -333,12 +336,13 @@
                   <!-- Saved rules -->
                   {#if forwardRules.length > 0}
                     <div class="fp-row">
-                      <label>Saved Rules</label>
+                      <span class="fp-label">Saved Rules</span>
                       <div class="fp-rules">
                         {#each forwardRules as rule}
                           <button class="rule-chip" onclick={() => applyRule(rule)}>
                             {rule.name} ({rule.method} {rule.target_url.replace(/^https?:\/\/[^/]+/, "...")})
-                            <span class="rule-delete" onclick={(e) => { e.stopPropagation(); deleteRule(rule.id); }}>x</span>
+                            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                            <span class="rule-delete" role="button" tabindex="-1" onclick={(e) => { e.stopPropagation(); deleteRule(rule.id); }}>x</span>
                           </button>
                         {/each}
                       </div>
@@ -347,7 +351,7 @@
 
                   <!-- Target config -->
                   <div class="fp-row">
-                    <label>Target</label>
+                    <span class="fp-label">Target</span>
                     <div class="fp-target">
                       <select bind:value={fwdMethod}>
                         <option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
@@ -358,7 +362,7 @@
 
                   <!-- Mapper table -->
                   <div class="fp-row">
-                    <label>Key Mapping</label>
+                    <span class="fp-label">Key Mapping</span>
                     <table class="mapper-table">
                       <thead><tr><th></th><th>Source Key</th><th>Value</th><th></th><th>Target Key</th><th></th></tr></thead>
                       <tbody>
@@ -379,7 +383,7 @@
 
                   <!-- Custom headers -->
                   <div class="fp-row">
-                    <label>Headers</label>
+                    <span class="fp-label">Headers</span>
                     {#each fwdHeaders as h, i}
                       <div class="header-row">
                         <input type="text" bind:value={h.key} placeholder="Header-Key" />
@@ -392,7 +396,7 @@
 
                   <!-- Preview -->
                   <div class="fp-row">
-                    <label>Preview</label>
+                    <span class="fp-label">Preview</span>
                     <pre class="fp-preview">{buildMappedBody(payload)}</pre>
                   </div>
 
@@ -554,7 +558,7 @@
   .fp-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
   .fp-header h4 { font-size: 13px; font-weight: 600; color: var(--accent); }
   .fp-row { margin-bottom: 12px; }
-  .fp-row > label { display: block; font-size: 10px; color: var(--text-dim); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .fp-row > .fp-label { display: block; font-size: 10px; color: var(--text-dim); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; margin-bottom: 4px; }
   .fp-target { display: flex; gap: 6px; }
   .fp-target select { padding: 5px 8px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-surface); color: var(--text); font-size: 12px; font-weight: 600; outline: none; }
   .fp-target input { flex: 1; padding: 5px 10px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-surface); color: var(--text); font-size: 12px; font-family: "SF Mono","Fira Code",Menlo,monospace; outline: none; }

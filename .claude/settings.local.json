@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(cargo check *)",
-      "Bash(cargo build *)"
+      "Bash(cargo build *)",
+      "Bash(mkdir -p /Users/watchakorn.b/FILE_CODE/code_WK/inter-load/.claude/skills)",
+      "Bash(npm install *)",
+      "Bash(npm run *)"
+    ],
+    "additionalDirectories": [
+      "/Users/watchakorn.b/FILE_CODE/code_WK/inter-load/.claude"
     ]
   }
 }
