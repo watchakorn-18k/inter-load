@@ -5,7 +5,7 @@ use axum::response::Json;
 use axum::Router;
 use axum::routing::{any, get};
 use chrono::{DateTime, Utc};
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use uuid::Uuid;

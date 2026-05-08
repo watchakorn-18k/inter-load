@@ -11,7 +11,25 @@
       "Bash(rsvg-convert -w 32 -h 32 ../../logo.svg -o 32x32.png)",
       "Bash(rsvg-convert -w 128 -h 128 ../../logo.svg -o 128x128.png)",
       "Bash(rsvg-convert -w 256 -h 256 ../../logo.svg -o 128x128@2x.png)",
-      "Bash(rsvg-convert -w 512 -h 512 ../../logo.svg -o icon.png)"
+      "Bash(rsvg-convert -w 512 -h 512 ../../logo.svg -o icon.png)",
+      "Bash(pip3 install *)",
+      "Bash(python3 -c ' *)",
+      "Bash(bunx --bun sharp-cli --version)",
+      "Bash(npx sharp-cli *)",
+      "Bash(bun run *)",
+      "Bash(node -e ' *)",
+      "Bash(kill %1)",
+      "Bash(wait)",
+      "Bash(bun install *)",
+      "Bash(sips -z 32 32 ../../icon.png --out 32x32.png)",
+      "Bash(sips -z 128 128 ../../icon.png --out 128x128.png)",
+      "Bash(sips -z 256 256 ../../icon.png --out 128x128@2x.png)",
+      "Bash(sips -z 512 512 ../../icon.png --out icon.png)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "WebSearch",
+      "Bash(curl -s https://crates.io/api/v1/crates/hudsucker)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f\\\\\"Latest: {d['crate']['max_version']}, Downloads: {d['crate']['downloads']}\\\\\"\\)\")"
     ],
     "additionalDirectories": [
       "/Users/watchakorn.b/FILE_CODE/code_WK/inter-load/.claude"

@@ -120,11 +120,11 @@ curl -X POST http://localhost:3030/webhook/github \
 
 ## Roadmap
 
-- [ ] Auto-forward with saved rules (no manual trigger needed)
-- [ ] Filter / Search payloads
-- [ ] Export payloads as JSON / CSV
-- [ ] Dark / Light theme toggle
-- [ ] WebSocket support
+- [x] Auto-forward with saved rules (no manual trigger needed)
+- [x] Filter / Search payloads
+- [x] Export payloads as JSON / CSV
+- [x] Dark / Light theme toggle
+- [x] WebSocket support
 
 ---
 

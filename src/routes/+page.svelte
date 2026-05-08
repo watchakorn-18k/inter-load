@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { save } from "@tauri-apps/plugin-dialog";
 
   interface PayloadEntry {
     id: string;
@@ -10,12 +11,15 @@
     body: string;
     content_type: string | null;
     received_at: string;
+    source_type: string;
   }
 
   interface ServerStatus { port: number; running: boolean; }
   interface MapEntry { source_key: string; target_key: string; enabled: boolean; }
-  interface ForwardRule { id: string; name: string; target_url: string; method: string; mappings: MapEntry[]; headers: Record<string, string>; }
+  interface ForwardRule { id: string; name: string; target_url: string; method: string; mappings: MapEntry[]; headers: Record<string, string>; enabled: boolean; }
   interface ForwardResult { status: number; body: string; duration_ms: number; }
+  interface AutoForwardLog { payload_id: string; rule_id: string; rule_name: string; status: number; body: string; duration_ms: number; forwarded_at: string; }
+  interface WsStatus { active_connections: number; total_messages: number; }
 
   let payloads = $state<PayloadEntry[]>([]);
   let serverStatus = $state<ServerStatus>({ port: 3030, running: false });
@@ -31,6 +35,16 @@
   let webhookPath = $state("/webhook");
   let newWebhookPath = $state("/webhook");
 
+  // Theme
+  let theme = $state<"dark" | "light">("dark");
+
+  // Filter
+  let filterText = $state("");
+  let filterMethod = $state("ALL");
+
+  // Export
+  let exportFormat = $state<"json" | "csv">("json");
+
   // Forward state
   let forwardPanelId = $state<string | null>(null);
   let forwardRules = $state<ForwardRule[]>([]);
@@ -41,6 +55,28 @@
   let fwdSending = $state(false);
   let fwdResult = $state<ForwardResult | null>(null);
   let fwdRuleName = $state("");
+
+  // Auto-forward logs
+  let autoForwardLogs = $state<AutoForwardLog[]>([]);
+
+  // WebSocket
+  let wsStatus = $state<WsStatus>({ active_connections: 0, total_messages: 0 });
+
+  let filteredPayloads = $derived(() => {
+    let result = payloads;
+    if (filterMethod !== "ALL") {
+      result = result.filter(p => p.method === filterMethod);
+    }
+    if (filterText.trim()) {
+      const q = filterText.toLowerCase().trim();
+      result = result.filter(p =>
+        p.path.toLowerCase().includes(q) ||
+        p.body.toLowerCase().includes(q) ||
+        p.source_ip.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  });
 
   async function fetchPayloads() {
     try {
@@ -72,6 +108,14 @@
 
   async function fetchForwardRules() {
     try { forwardRules = await invoke<ForwardRule[]>("get_forward_rules"); } catch { /* noop */ }
+  }
+
+  async function fetchAutoForwardLogs() {
+    try { autoForwardLogs = await invoke<AutoForwardLog[]>("get_auto_forward_logs"); } catch { /* noop */ }
+  }
+
+  async function fetchWsStatus() {
+    try { wsStatus = await invoke<WsStatus>("get_ws_status"); } catch { /* noop */ }
   }
 
   async function changeServerConfig() {
@@ -171,6 +215,10 @@
     fwdHeaders = Object.entries(rule.headers).map(([key, value]) => ({ key, value }));
   }
 
+  async function toggleAutoForward(ruleId: string) {
+    try { await invoke("toggle_forward_rule", { id: ruleId }); await fetchForwardRules(); } catch (e) { error = String(e); }
+  }
+
   async function doForward(payload: PayloadEntry) {
     fwdSending = true; fwdResult = null;
     try {
@@ -190,7 +238,7 @@
       const headers: Record<string, string> = {};
       for (const h of fwdHeaders) { if (h.key) headers[h.key] = h.value; }
       await invoke("save_forward_rule", {
-        name: fwdRuleName, targetUrl: fwdUrl, method: fwdMethod, mappings, headers,
+        name: fwdRuleName, targetUrl: fwdUrl, method: fwdMethod, mappings, headers, enabled: true,
       });
       await fetchForwardRules();
     } catch (e) { error = String(e); }
@@ -198,6 +246,20 @@
 
   async function deleteRule(id: string) {
     try { await invoke("delete_forward_rule", { id }); await fetchForwardRules(); } catch (e) { error = String(e); }
+  }
+
+  async function exportPayloads() {
+    try {
+      const content = await invoke<string>("export_payloads", { format: exportFormat });
+      const ext = exportFormat;
+      const filePath = await save({
+        defaultPath: `payloads.${ext}`,
+        filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
+      });
+      if (filePath) {
+        await invoke("write_export_file", { path: filePath, content });
+      }
+    } catch (e) { error = String(e); }
   }
 
   async function copyText(text: string, id: string) {
@@ -214,14 +276,30 @@
     switch (method.toUpperCase()) {
       case "GET": return "#5b9cf6"; case "POST": return "#4ade80"; case "PUT": return "#fb923c";
       case "DELETE": return "#f87171"; case "PATCH": return "#2dd4bf"; case "TEST": return "#c084fc";
+      case "WS": return "#e879f9";
       default: return "#94a3b8";
     }
   }
 
-  $effect(() => { fetchPayloads(); fetchStatus(); fetchForwardRules(); });
+  $effect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("inter-load-theme", theme);
+  });
+
+  $effect(() => {
+    const saved = localStorage.getItem("inter-load-theme");
+    if (saved === "light" || saved === "dark") theme = saved;
+
+    fetchPayloads(); fetchStatus(); fetchForwardRules(); fetchAutoForwardLogs(); fetchWsStatus();
+  });
+
   $effect(() => {
     if (pollInterval) clearInterval(pollInterval);
-    if (autoRefresh) { pollInterval = setInterval(fetchPayloads, 2000); }
+    if (autoRefresh) {
+      pollInterval = setInterval(() => {
+        fetchPayloads(); fetchAutoForwardLogs(); fetchWsStatus();
+      }, 2000);
+    }
     return () => { if (pollInterval) clearInterval(pollInterval); };
   });
 </script>
@@ -235,6 +313,9 @@
       </span>
     </div>
     <div class="header-right">
+      <button class="btn btn-outline btn-small theme-toggle" onclick={() => theme = theme === "dark" ? "light" : "dark"}>
+        {theme === "dark" ? "&#9728;" : "&#9790;"}
+      </button>
       <div class="port-config">
         <label for="port-input">Port:</label>
         <input id="port-input" type="number" bind:value={newPort} min="1" max="65535" />
@@ -249,14 +330,37 @@
     <div class="toolbar-left">
       <span class="count">{payloads.length} payload{payloads.length !== 1 ? "s" : ""}</span>
       <span class="webhook-url">Webhook: <code>http://localhost:{serverStatus.port}{webhookPath}</code></span>
+      {#if wsStatus.active_connections > 0}
+        <span class="ws-indicator active">WS: {wsStatus.active_connections} connected ({wsStatus.total_messages} msgs)</span>
+      {:else}
+        <span class="ws-indicator">WS: ws://localhost:{serverStatus.port}/ws</span>
+      {/if}
     </div>
     <div class="toolbar-right">
       <label class="toggle-label"><input type="checkbox" bind:checked={autoRefresh} /> Auto</label>
       <button class="btn btn-outline btn-small" onclick={fetchPayloads}>Refresh</button>
       <button class="btn btn-outline btn-small" onclick={expandAll}>Expand All</button>
       <button class="btn btn-outline btn-small" onclick={collapseAll}>Collapse</button>
+      <select bind:value={exportFormat} class="export-select">
+        <option value="json">JSON</option>
+        <option value="csv">CSV</option>
+      </select>
+      <button class="btn btn-outline btn-small" onclick={exportPayloads} disabled={payloads.length === 0}>Export</button>
       <button class="btn btn-danger btn-small" onclick={clearAll}>Clear</button>
     </div>
+  </div>
+
+  <div class="filter-bar">
+    <input type="text" placeholder="Search path, body, IP..." bind:value={filterText} class="filter-input" />
+    <select bind:value={filterMethod} class="filter-select">
+      <option value="ALL">All Methods</option>
+      <option>GET</option><option>POST</option><option>PUT</option>
+      <option>DELETE</option><option>PATCH</option><option>TEST</option><option>WS</option>
+    </select>
+    {#if filterText || filterMethod !== "ALL"}
+      <button class="btn btn-outline btn-small" onclick={() => { filterText = ''; filterMethod = 'ALL'; }}>Clear</button>
+    {/if}
+    <span class="filter-count">{filteredPayloads().length} of {payloads.length}</span>
   </div>
 
   {#if error}<div class="error-bar">{error}</div>{/if}
@@ -268,10 +372,17 @@
           <div class="empty-icon">&#128230;</div>
           <h3>No payloads yet</h3>
           <p>Send a POST request to <code>http://localhost:{serverStatus.port}{webhookPath}</code></p>
+          <p>or connect via <code>ws://localhost:{serverStatus.port}/ws</code></p>
           <p>or use the test form on the right</p>
         </div>
+      {:else if filteredPayloads().length === 0}
+        <div class="empty-state">
+          <div class="empty-icon">&#128269;</div>
+          <h3>No matches</h3>
+          <p>No payloads match your filter. <button class="btn btn-outline btn-small" onclick={() => { filterText = ''; filterMethod = 'ALL'; }}>Clear filters</button></p>
+        </div>
       {:else}
-        {#each payloads as payload (payload.id)}
+        {#each filteredPayloads() as payload (payload.id)}
           {@const isExpanded = expandedIds.has(payload.id)}
           {@const { text: bodyText, isJson } = isExpanded ? getBodyDisplay(payload) : { text: "", isJson: false }}
           {@const viewMode = viewModes.get(payload.id) ?? "pretty"}
@@ -281,6 +392,9 @@
             <div class="payload-header" role="button" tabindex="0" onclick={() => toggleExpand(payload.id)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleExpand(payload.id); } }}>
               <div class="payload-meta">
                 <span class="method-badge" style="background: {methodColor(payload.method)}">{payload.method}</span>
+                {#if payload.source_type === "websocket"}
+                  <span class="ws-tag">WS</span>
+                {/if}
                 <span class="payload-path">{payload.path}</span>
                 <span class="payload-source">from {payload.source_ip}</span>
               </div>
@@ -339,11 +453,16 @@
                       <span class="fp-label">Saved Rules</span>
                       <div class="fp-rules">
                         {#each forwardRules as rule}
-                          <button class="rule-chip" onclick={() => applyRule(rule)}>
-                            {rule.name} ({rule.method} {rule.target_url.replace(/^https?:\/\/[^/]+/, "...")})
+                          <div class="rule-chip-wrapper">
+                            <button class="rule-chip" class:disabled={!rule.enabled} onclick={() => applyRule(rule)}>
+                              {rule.name} ({rule.method} {rule.target_url.replace(/^https?:\/\/[^/]+/, "...")})
+                              <span class="rule-delete" role="button" tabindex="-1" onclick={(e) => { e.stopPropagation(); deleteRule(rule.id); }}>x</span>
+                            </button>
                             <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                            <span class="rule-delete" role="button" tabindex="-1" onclick={(e) => { e.stopPropagation(); deleteRule(rule.id); }}>x</span>
-                          </button>
+                            <span class="rule-toggle" class:active={rule.enabled} role="button" tabindex="-1" onclick={(e) => { e.stopPropagation(); toggleAutoForward(rule.id); }}>
+                              {rule.enabled ? "ON" : "OFF"}
+                            </span>
+                          </div>
                         {/each}
                       </div>
                     </div>
@@ -446,22 +565,43 @@
       </div>
       <div class="form-group">
         <label for="test-body">Body</label>
-        <textarea id="test-body" rows="12" bind:value={testBody}></textarea>
+        <textarea id="test-body" rows="8" bind:value={testBody}></textarea>
       </div>
       <button class="btn btn-primary btn-full" onclick={sendTest}>Send</button>
+
       <div class="sidebar-help">
         <h4>Quick Test (curl)</h4>
         <pre class="curl-example">curl -X POST http://localhost:{serverStatus.port}{webhookPath} \
   -H "Content-Type: application/json" \
   -d '{"{"}hello": "world"{"}"}'</pre>
       </div>
+
+      <div class="sidebar-help">
+        <h4>WebSocket Test</h4>
+        <pre class="curl-example">ws://localhost:{serverStatus.port}/ws</pre>
+      </div>
+
+      {#if autoForwardLogs.length > 0}
+        <div class="sidebar-help">
+          <h4>Auto-Forward Log ({autoForwardLogs.length})</h4>
+          <div class="af-logs">
+            {#each autoForwardLogs.slice(0, 20) as log}
+              <div class="af-log-entry" class:ok={log.status < 400} class:err={log.status >= 400}>
+                <span class="af-rule-name">{log.rule_name}</span>
+                <span class="af-status">{log.status}</span>
+                <span class="af-time">{log.duration_ms}ms</span>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
     </aside>
   </div>
 </main>
 
 <style>
   :global(html, body) {
-    margin: 0; padding: 0; background: #111318; color: #e1e4ea;
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     overflow: hidden; height: 100%;
   }
@@ -472,6 +612,14 @@
     --green: #4ade80; --green-soft: rgba(74,222,128,0.12);
     --red: #f87171; --red-soft: rgba(248,113,113,0.12);
     --orange: #fb923c; --purple: #c084fc; --radius: 6px;
+    --scrollbar-thumb: #2a2f3e; --scrollbar-thumb-hover: #7c849a;
+  }
+  [data-theme="light"] {
+    --bg: #f5f6fa; --bg-surface: #ffffff; --bg-elevated: #eef0f5; --bg-input: #f0f1f5;
+    --border: #d8dbe5; --border-light: #c5c9d6; --text: #1a1d26; --text-dim: #5c6378;
+    --accent: #3b7dd8; --accent-soft: rgba(59,125,216,0.08); --accent-hover: #2d6bc4;
+    --green-soft: rgba(34,197,94,0.1); --red-soft: rgba(239,68,68,0.08);
+    --scrollbar-thumb: #c5c9d6; --scrollbar-thumb-hover: #94a3b8;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   .app { display: flex; flex-direction: column; height: 100vh; background: var(--bg); }
@@ -479,9 +627,11 @@
   .header { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--bg-surface); flex-shrink: 0; }
   .header-left { display: flex; align-items: center; gap: 12px; }
   .header-left h1 { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; color: var(--text); }
+  .header-right { display: flex; align-items: center; gap: 8px; }
   .badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
   .badge.running { background: var(--green-soft); color: var(--green); }
   .badge.stopped { background: var(--red-soft); color: var(--red); }
+  .theme-toggle { font-size: 14px; min-width: 34px; text-align: center; }
   .port-config { display: flex; align-items: center; gap: 8px; font-size: 12px; }
   .port-config label { color: var(--text-dim); }
   .port-config input { padding: 4px 8px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-input); color: var(--text); font-size: 12px; outline: none; }
@@ -495,6 +645,18 @@
   .webhook-url { color: var(--text-dim); }
   .webhook-url code { background: var(--bg-input); padding: 2px 6px; border-radius: 4px; color: var(--accent); font-size: 11px; border: 1px solid var(--border); }
   .toggle-label { display: flex; align-items: center; gap: 4px; color: var(--text-dim); cursor: pointer; }
+
+  .ws-indicator { font-size: 11px; color: var(--text-dim); padding: 1px 6px; background: var(--bg-elevated); border-radius: 4px; }
+  .ws-indicator.active { color: #e879f9; background: rgba(232,121,249,0.12); }
+  .ws-tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; background: rgba(232,121,249,0.12); color: #e879f9; text-transform: uppercase; letter-spacing: 0.3px; }
+
+  .export-select { padding: 3px 6px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-input); color: var(--text); font-size: 11px; }
+
+  .filter-bar { display: flex; align-items: center; gap: 8px; padding: 6px 20px; border-bottom: 1px solid var(--border); background: var(--bg-surface); flex-shrink: 0; }
+  .filter-input { flex: 1; padding: 5px 10px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-input); color: var(--text); font-size: 12px; outline: none; }
+  .filter-input:focus { border-color: var(--accent); }
+  .filter-select { padding: 5px 8px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-input); color: var(--text); font-size: 12px; }
+  .filter-count { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
 
   .btn { padding: 5px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text-dim); font-size: 12px; cursor: pointer; transition: all 0.15s; }
   .btn:hover { color: var(--text); background: var(--border); }
@@ -521,7 +683,7 @@
   .payload-card:hover { border-color: var(--border-light); }
   .payload-card.expanded { border-color: var(--accent); }
   .payload-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; cursor: pointer; }
-  .payload-header:hover { background: rgba(255,255,255,0.02); }
+  .payload-header:hover { background: rgba(128,128,128,0.04); }
   .payload-meta { display: flex; align-items: center; gap: 8px; }
   .payload-meta-right { display: flex; align-items: center; gap: 10px; }
   .method-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; color: #fff; text-transform: uppercase; min-width: 44px; text-align: center; letter-spacing: 0.3px; }
@@ -565,9 +727,13 @@
   .fp-target input:focus { border-color: var(--accent); }
 
   .fp-rules { display: flex; flex-wrap: wrap; gap: 4px; }
+  .rule-chip-wrapper { display: flex; align-items: center; gap: 2px; }
   .rule-chip { padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-dim); font-size: 11px; cursor: pointer; transition: all 0.15s; }
   .rule-chip:hover { border-color: var(--accent); color: var(--text); }
+  .rule-chip.disabled { opacity: 0.5; }
   .rule-delete { margin-left: 4px; color: var(--red); font-weight: 700; }
+  .rule-toggle { font-size: 9px; font-weight: 700; padding: 1px 4px; border-radius: 3px; color: var(--red); background: var(--red-soft); cursor: pointer; user-select: none; }
+  .rule-toggle.active { color: var(--green); background: var(--green-soft); }
 
   .mapper-table { width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 12px; }
   .mapper-table th { font-size: 10px; color: var(--text-dim); text-transform: uppercase; font-weight: 600; text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); letter-spacing: 0.5px; }
@@ -598,7 +764,7 @@
   .fp-result.ok .result-status { color: var(--green); }
   .fp-result.err .result-status { color: var(--red); }
   .result-time { color: var(--text-dim); font-size: 12px; }
-  .result-body { margin-top: 6px; font-size: 11px; font-family: "SF Mono","Fira Code",Menlo,monospace; white-space: pre-wrap; word-break: break-all; color: var(--text-dim); max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 6px; }
+  .result-body { margin-top: 6px; font-size: 11px; font-family: "SF Mono","Fira Code",Menlo,monospace; white-space: pre-wrap; word-break: break-all; color: var(--text-dim); max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.15); border-radius: 4px; padding: 6px; }
 
   /* Sidebar */
   .sidebar { width: 300px; border-left: 1px solid var(--border); padding: 14px; overflow-y: auto; background: var(--bg-surface); flex-shrink: 0; }
@@ -611,10 +777,18 @@
   .sidebar-help h4 { font-size: 11px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; }
   .curl-example { background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; font-size: 11px; font-family: "SF Mono","Fira Code",Menlo,monospace; white-space: pre-wrap; color: var(--text-dim); line-height: 1.5; }
 
+  .af-logs { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
+  .af-log-entry { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 4px; font-size: 11px; background: var(--bg-input); border: 1px solid var(--border); }
+  .af-rule-name { flex: 1; color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .af-status { font-weight: 700; }
+  .af-time { color: var(--text-dim); }
+  .af-log-entry.ok .af-status { color: var(--green); }
+  .af-log-entry.err .af-status { color: var(--red); }
+
   .error-bar { background: var(--red-soft); color: var(--red); padding: 6px 20px; font-size: 12px; border-bottom: 1px solid rgba(248,113,113,0.2); }
 
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+  ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 </style>
