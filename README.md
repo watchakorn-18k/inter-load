@@ -120,12 +120,52 @@ curl -X POST http://localhost:3030/webhook/github \
 
 ## Roadmap
 
+### Done
 - [x] Auto-forward with saved rules (no manual trigger needed)
 - [x] Filter / Search payloads
 - [x] Export payloads as JSON / CSV
 - [x] Dark / Light theme toggle
 - [x] WebSocket support
 - [x] HTTP/HTTPS MITM Proxy (capture all traffic)
+- [x] CA cert persist across sessions
+- [x] System proxy auto-set/unset
+- [x] Pause/Resume traffic capture
+- [x] Curl examples & testing guide in-app
+
+### Planned
+
+**API Tester** — Postman ในตัว
+สร้าง request เอง (GET/POST/PUT/PATCH/DELETE) ตั้ง headers, body, query params ดู response พร้อม status code, timing บันทึกเป็น collection ใช้ซ้ำได้
+
+**Request Replay** — เอา traffic ที่ดักได้ยิงซ้ำ
+เลือก request จาก Webhook/Proxy tab กด Replay ยิงอีกครั้ง หรือแก้ body/headers ก่อนยิง เปรียบเทียบ response รอบเก่า vs รอบใหม่ (diff view)
+
+**Mock Server** — สร้าง fake API response
+กำหนด path, method, response body, status code ใช้แทน backend ตอน dev frontend รองรับ dynamic response (จาก template) บันทึกเป็น mock collection
+
+**SSL/TLS Inspector** — ตรวจ cert ของเว็บ
+ใส่ URL แล้วดู certificate chain, วันหมดอายุ, issuer, SAN เช็ค security headers (HSTS, CSP, etc.) เหมาะสำหรับ debug HTTPS ไม่ผ่าน
+
+**Latency Monitor** — จับเวลา API ตามช่วงเวลา
+Track response time ของแต่ละ endpoint แสดงเป็นกราฟเส้น (p50, p95, p99) แจ้งเตือนเมื่อ latency เกิน threshold Export เป็น report
+
+**Diff & Compare** — เทียบ request/response 2 อัน
+เลือก 2 entries จาก traffic มาเทียบ side-by-side เน้นส่วนที่ต่างกัน (headers, body diff) เหมาะสำหรับ debug ว่า "request นี้ต่างจากอันนั้นตรงไหน"
+
+**Proxy Ad Blocker** — ดักและบล็อก ads/trackers
+Block ads, tracking scripts, malware domains ผ่าน proxy โดยอัตโนมัติ ใช้ filter list แบบ uBlock Origin แสดงสถิติว่าบล็อกอะไรไปบ้าง ปรับเปิด/ปิดได้ตาม domain
+
+**Protocol Fingerprinter** — จับและ auto-decode traffic
+จับ traffic เข้ามาแล้วบอกได้เลยว่านี่คืออะไร (REST, GraphQL, gRPC, protobuf, msgpack, WebSocket binary frame) พร้อม auto-decode format นั้นให้เป็น readable format ทันที
+
+**Token/Secret Hunter** — ขุดทุกอย่างที่ซ่อนอยู่ใน payload
+Scan payload ทุก field อัตโนมัติว่ามีอะไรซ่อนอยู่ (JWT, base64 encoded payload, API key patterns, OAuth tokens, private keys) แล้ว decode ทุกชั้นออกมาให้ แม้ base64 ซ้อน base64 ก็ขุดให้หมด
+
+**API Behavior Diff** — เทียบ response ระหว่าง 2 environment
+ยิง request เดียวกันไป 2 environment (prod vs staging / version เก่า vs ใหม่) แล้ว diff response ทุก field บอกว่า field ไหนเปลี่ยน type, หาย, เพิ่ม, ค่าต่าง — ใช้จับ breaking changes และ undocumented API changes
+
+**Traffic Timeline Replay** — เล่นย้อน traffic แบบ video player
+อัด traffic ทั้งหมดเป็น timeline แล้ว "เล่นย้อน" ได้แบบ video player — scrub ไปมาดูว่าช่วงเวลานั้นมี request อะไรบ้าง ลำดับยังไง ใช้ reproduce bug ที่เกิดจาก sequence ของ request
 
 ---
 
