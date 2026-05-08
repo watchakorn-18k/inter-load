@@ -4,49 +4,115 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Inter-Load — Desktop Webhook Inspector & Forwarder</title>
-  <meta name="description" content="Intercept, inspect, and forward incoming webhook payloads in real-time. A desktop app built with Tauri v2 + SvelteKit + Rust.">
+  <meta name="description" content="Intercept, inspect, and forward incoming webhook payloads in real-time. A free desktop app for macOS, Windows & Linux. Built with Tauri v2 + SvelteKit + Rust.">
+  <meta name="keywords" content="webhook inspector, webhook debugger, payload forwarder, webhook testing, API debugging, desktop app, Tauri, SvelteKit, Rust">
+  <meta name="author" content="Watchakorn B">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://watchakorn-18k.github.io/inter-load/">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Inter-Load — Desktop Webhook Inspector & Forwarder">
+  <meta property="og:description" content="Intercept, inspect, and forward incoming webhook payloads in real-time. Free for macOS, Windows & Linux.">
+  <meta property="og:url" content="https://watchakorn-18k.github.io/inter-load/">
+  <meta property="og:site_name" content="Inter-Load">
+  <meta property="og:image" content="https://watchakorn-18k.github.io/inter-load/screens/image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Inter-Load — Desktop Webhook Inspector & Forwarder">
+  <meta name="twitter:description" content="Intercept, inspect, and forward incoming webhook payloads in real-time. Free for macOS, Windows & Linux.">
+  <meta name="twitter:image" content="https://watchakorn-18k.github.io/inter-load/screens/image.png">
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Inter-Load",
+    "description": "Desktop webhook inspector & forwarder that captures incoming payloads in real-time. Intercept, inspect, and forward webhooks on macOS, Windows, and Linux.",
+    "url": "https://watchakorn-18k.github.io/inter-load/",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Person",
+      "name": "Watchakorn B"
+    },
+    "programmingLanguage": "TypeScript, Rust",
+    "license": "https://opensource.org/licenses/MIT"
+  }
+  </script>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" sizes="32x32" href="../src-tauri/icons/32x32.png">
+  <link rel="icon" type="image/png" sizes="128x128" href="../src-tauri/icons/128x128.png">
+
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     :root{
       --teal:#10B7C4;--teal-light:#08D0C2;--navy:#061E4D;--navy-light:#082B63;
       --bg:#F8FAFB;--text:#1a1a2e;--text-light:#5a6070;--white:#fff;--border:#e2e8f0;
+      --card-bg:#fff;--nav-bg:rgba(248,250,251,.85);--code-bg:#f1f5f9;
+    }
+    [data-theme="dark"]{
+      --bg:#0f1117;--text:#e2e8f0;--text-light:#94a3b8;--white:#1a1d27;--border:#2a2d3a;
+      --card-bg:#1a1d27;--nav-bg:rgba(15,17,23,.85);--code-bg:#252836;
     }
     html{scroll-behavior:smooth}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--text);background:var(--bg);line-height:1.7}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--text);background:var(--bg);line-height:1.7;transition:background .3s,color .3s}
     a{color:var(--teal);text-decoration:none}
     .container{max-width:1120px;margin:0 auto;padding:0 24px}
 
     /* Nav */
-    nav{position:sticky;top:0;z-index:100;background:rgba(248,250,251,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+    nav{position:sticky;top:0;z-index:100;background:var(--nav-bg);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);transition:background .3s}
     nav .container{display:flex;align-items:center;justify-content:space-between;height:64px}
-    nav .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:1.2rem;color:var(--navy)}
+    nav .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:1.2rem;color:var(--text)}
     nav .logo svg{width:32px;height:32px}
+    nav .nav-right{display:flex;align-items:center;gap:20px}
     nav .links{display:flex;gap:28px;font-size:.95rem;font-weight:500}
     nav .links a{color:var(--text-light);transition:color .2s}
     nav .links a:hover{color:var(--teal)}
 
+    /* Theme toggle */
+    .theme-toggle{position:relative;width:36px;height:36px;border-radius:10px;border:1px solid var(--border);background:var(--card-bg);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s,border-color .2s}
+    .theme-toggle:hover{border-color:var(--teal)}
+    .theme-toggle svg{width:18px;height:18px;color:var(--text-light);transition:color .2s}
+    .theme-menu{position:absolute;top:calc(100% + 8px);right:0;background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:6px;min-width:140px;box-shadow:0 12px 32px rgba(0,0,0,.15);opacity:0;visibility:hidden;transform:translateY(-8px);transition:all .2s}
+    .theme-menu.open{opacity:1;visibility:visible;transform:translateY(0)}
+    .theme-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 12px;border:none;border-radius:8px;background:transparent;color:var(--text);font-size:.9rem;cursor:pointer;transition:background .15s}
+    .theme-menu button:hover{background:var(--bg)}
+    .theme-menu button.active{color:var(--teal);font-weight:600}
+    .theme-menu button svg{width:16px;height:16px;flex-shrink:0}
+
     /* Hero */
-    .hero{padding:100px 0 80px;text-align:center;background:linear-gradient(180deg,var(--white) 0%,var(--bg) 100%)}
+    .hero{padding:100px 0 80px;text-align:center;background:linear-gradient(180deg,var(--card-bg) 0%,var(--bg) 100%)}
     .hero h1{font-size:clamp(2.4rem,5vw,3.8rem);font-weight:800;letter-spacing:-.02em;line-height:1.15;margin-bottom:20px}
     .hero h1 span{background:linear-gradient(135deg,var(--teal),var(--teal-light));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
     .hero p{font-size:1.2rem;color:var(--text-light);max-width:600px;margin:0 auto 40px}
     .hero .badges{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-bottom:48px}
-    .hero .badges span{background:var(--white);border:1px solid var(--border);border-radius:20px;padding:6px 16px;font-size:.85rem;font-weight:500;color:var(--text-light)}
+    .hero .badges span{background:var(--card-bg);border:1px solid var(--border);border-radius:20px;padding:6px 16px;font-size:.85rem;font-weight:500;color:var(--text-light)}
     .hero .cta-group{display:flex;justify-content:center;gap:16px;flex-wrap:wrap}
     .btn{display:inline-flex;align-items:center;gap:8px;padding:14px 32px;border-radius:12px;font-size:1rem;font-weight:600;border:none;cursor:pointer;transition:transform .15s,box-shadow .15s}
     .btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(16,183,196,.25)}
     .btn-primary{background:linear-gradient(135deg,var(--teal),var(--teal-light));color:var(--white)}
-    .btn-secondary{background:var(--white);color:var(--navy);border:1px solid var(--border)}
+    .btn-secondary{background:var(--card-bg);color:var(--text);border:1px solid var(--border)}
 
     /* Screenshot */
     .screenshot{max-width:900px;margin:0 auto;padding:0 24px 80px}
     .screenshot img{width:100%;border-radius:16px;box-shadow:0 20px 60px rgba(6,30,77,.12);border:1px solid var(--border)}
 
     /* Features */
-    .features{padding:80px 0;background:var(--white)}
+    .features{padding:80px 0;background:var(--card-bg)}
     .features h2{text-align:center;font-size:2rem;font-weight:700;margin-bottom:48px}
     .features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px}
-    .feature-card{padding:32px;border-radius:16px;border:1px solid var(--border);transition:border-color .2s}
+    .feature-card{padding:32px;border-radius:16px;border:1px solid var(--border);background:var(--bg);transition:border-color .2s,background .3s}
     .feature-card:hover{border-color:var(--teal)}
     .feature-icon{width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,var(--teal),var(--teal-light));display:flex;align-items:center;justify-content:center;margin-bottom:16px;color:var(--white);font-size:1.4rem}
     .feature-card h3{font-size:1.15rem;font-weight:600;margin-bottom:8px}
@@ -62,11 +128,11 @@
     .step p{color:var(--text-light);font-size:.9rem}
 
     /* Download */
-    .download{padding:80px 0;background:var(--white)}
+    .download{padding:80px 0;background:var(--card-bg)}
     .download h2{text-align:center;font-size:2rem;font-weight:700;margin-bottom:12px}
     .download>p{text-align:center;color:var(--text-light);margin-bottom:48px}
     .download-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px}
-    .download-card{padding:32px;border-radius:16px;border:1px solid var(--border);text-align:center}
+    .download-card{padding:32px;border-radius:16px;border:1px solid var(--border);text-align:center;background:var(--bg)}
     .download-card .os-icon{font-size:2.4rem;margin-bottom:12px}
     .download-card h3{font-size:1.15rem;font-weight:600;margin-bottom:8px}
     .download-card .arch{font-size:.85rem;color:var(--text-light);margin-bottom:16px}
@@ -82,7 +148,7 @@
     .tech{padding:80px 0;text-align:center}
     .tech h2{font-size:2rem;font-weight:700;margin-bottom:40px}
     .tech-badges{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
-    .tech-badges span{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:10px 20px;font-weight:600;font-size:.95rem}
+    .tech-badges span{background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:10px 20px;font-weight:600;font-size:.95rem}
 
     /* Footer */
     footer{padding:40px 0;border-top:1px solid var(--border);text-align:center;color:var(--text-light);font-size:.9rem}
@@ -113,11 +179,32 @@
       </svg>
       Inter-Load
     </div>
-    <div class="links">
-      <a href="#features">Features</a>
-      <a href="#how">How It Works</a>
-      <a href="#download">Download</a>
-      <a href="https://github.com/watchakorn-18k/inter-load" target="_blank">GitHub</a>
+    <div class="nav-right">
+      <div class="links">
+        <a href="#features">Features</a>
+        <a href="#how">How It Works</a>
+        <a href="#download">Download</a>
+        <a href="https://github.com/watchakorn-18k/inter-load" target="_blank">GitHub</a>
+      </div>
+      <div style="position:relative">
+        <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+          <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        </button>
+        <div class="theme-menu" id="themeMenu">
+          <button data-mode="light">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            Light
+          </button>
+          <button data-mode="dark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            Dark
+          </button>
+          <button data-mode="system">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            System
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </nav>
