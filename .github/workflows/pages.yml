@@ -26,12 +26,11 @@ jobs:
 
       - name: Prepare Pages site
         run: |
-          mkdir -p _site
+          mkdir -p _site/icons
           cp landingpage/index.html _site/index.html
-          cp -r screens _site/screens
-          mkdir -p _site/src-tauri/icons
-          cp src-tauri/icons/32x32.png _site/src-tauri/icons/
-          cp src-tauri/icons/128x128.png _site/src-tauri/icons/
+          cp landingpage/image.png _site/image.png
+          cp src-tauri/icons/32x32.png _site/icons/
+          cp src-tauri/icons/128x128.png _site/icons/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

@@ -76,6 +76,7 @@
   let proxyTraffic = $state<ProxyTrafficEntry[]>([]);
   let proxyExpandedIds = $state<Set<string>>(new Set());
   let proxyFilter = $state("");
+  let showCurlExamples = $state(false);
   let caCertPem = $state("");
   let showCaCert = $state(false);
 
@@ -159,6 +160,7 @@
     if (isNaN(port) || port < 1 || port > 65535) { error = "Proxy port must be 1-65535"; return; }
     try {
       proxyStatus = await invoke<ProxyStatus>("start_proxy_cmd", { port });
+      checkCaCertStatus();
     } catch (e) { error = String(e); }
   }
 
@@ -168,6 +170,20 @@
 
   async function clearProxyTraffic() {
     try { await invoke("clear_proxy_traffic"); proxyTraffic = []; } catch (e) { error = String(e); }
+  }
+
+  async function setSystemProxy() {
+    try {
+      const msg = await invoke<string>("set_system_proxy", { port: parseInt(proxyPort, 10) });
+      error = msg;
+    } catch (e) { error = String(e); }
+  }
+
+  async function disableSystemProxy() {
+    try {
+      const msg = await invoke<string>("disable_system_proxy");
+      error = msg;
+    } catch (e) { error = String(e); }
   }
 
   async function fetchCaCert() {
@@ -188,6 +204,38 @@
         await invoke("write_export_file", { path: filePath, content: pem });
       }
     } catch (e) { error = String(e); }
+  }
+
+  let caInstallMsg = $state("");
+  let caInstalling = $state(false);
+  let caCertInstalled = $state(false);
+
+  async function checkCaCertStatus() {
+    try {
+      caCertInstalled = await invoke<boolean>("check_ca_cert_installed");
+      if (caCertInstalled) caInstallMsg = "CA certificate is already installed and trusted.";
+    } catch { /* proxy not started yet */ }
+  }
+
+  async function installCaCert() {
+    caInstalling = true; caInstallMsg = "";
+    try {
+      caInstallMsg = await invoke<string>("install_ca_cert");
+      // Poll for cert status since Terminal install is async
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        await checkCaCertStatus();
+        if (caCertInstalled) {
+          clearInterval(poll);
+          setTimeout(() => { caInstallMsg = ""; }, 3000);
+        }
+        if (attempts > 30) clearInterval(poll);
+      }, 2000);
+      // Auto-hide message after 5s if no poll match
+      setTimeout(() => { caInstallMsg = ""; }, 5000);
+    } catch (e) { caInstallMsg = String(e); setTimeout(() => { caInstallMsg = ""; }, 5000); }
+    finally { caInstalling = false; }
   }
 
   function toggleProxyExpand(id: string) {
@@ -707,8 +755,19 @@
       {/if}
     </div>
     <div class="toolbar-right">
+      <button class="btn btn-outline btn-small" onclick={setSystemProxy} disabled={!proxyStatus.running}>Set System Proxy</button>
+      <button class="btn btn-outline btn-small" onclick={disableSystemProxy}>Disable System Proxy</button>
       <button class="btn btn-outline btn-small" onclick={fetchProxyTraffic}>Refresh</button>
       <button class="btn btn-outline btn-small" onclick={exportCaCert}>Export CA Cert</button>
+      <button class="btn btn-primary btn-small" onclick={installCaCert} disabled={caInstalling || caCertInstalled}>
+        {#if caCertInstalled}
+          CA Cert Installed
+        {:else if caInstalling}
+          Installing...
+        {:else}
+          Install CA Cert
+        {/if}
+      </button>
       <button class="btn btn-outline btn-small" onclick={fetchCaCert}>Show CA Cert</button>
       <button class="btn btn-danger btn-small" onclick={clearProxyTraffic} disabled={proxyTraffic.length === 0}>Clear</button>
     </div>
@@ -718,6 +777,11 @@
     <div class="ca-cert-bar">
       <pre class="ca-cert-pre">{caCertPem}</pre>
       <button class="btn btn-small" onclick={() => showCaCert = false}>Close</button>
+    </div>
+  {/if}
+  {#if caInstallMsg}
+    <div class="ca-install-msg" class:ok={caInstallMsg.includes("success")} class:err={caInstallMsg.includes("cancel") || caInstallMsg.includes("Failed")}>
+      {caInstallMsg}
     </div>
   {/if}
 
@@ -734,6 +798,52 @@
         <h3>No proxy traffic</h3>
         <p>Start the proxy and set your system proxy to <code>127.0.0.1:{proxyPort}</code></p>
         <p>Install the CA certificate to decrypt HTTPS traffic</p>
+        <button class="curl-toggle-btn" onclick={() => showCurlExamples = !showCurlExamples}>
+          {showCurlExamples ? "▲ Hide" : "▼ Show"} curl examples
+        </button>
+        {#if showCurlExamples}
+          <div class="curl-examples">
+            <div class="curl-section">
+              <h4>HTTP (works without CA cert)</h4>
+              <pre class="curl-code">curl -x http://127.0.0.1:{proxyPort} http://httpbin.org/get</pre>
+            </div>
+            <div class="curl-section">
+              <h4>HTTPS (requires CA cert installed)</h4>
+              <pre class="curl-code">curl -x http://127.0.0.1:{proxyPort} https://httpbin.org/get</pre>
+            </div>
+            <div class="curl-section">
+              <h4>POST with JSON body</h4>
+              <pre class="curl-code">curl -x http://127.0.0.1:{proxyPort} -X POST https://httpbin.org/post -H "Content-Type: application/json" -d '&#123;"event": "test", "amount": 999&#125;'</pre>
+            </div>
+            <div class="curl-section">
+              <h4>Node.js app</h4>
+              <pre class="curl-code">HTTP_PROXY=http://127.0.0.1:{proxyPort} \
+HTTPS_PROXY=http://127.0.0.1:{proxyPort} \
+node your-app.js</pre>
+            </div>
+            <div class="curl-section">
+              <h4>Python requests</h4>
+              <pre class="curl-code">HTTP_PROXY=http://127.0.0.1:{proxyPort} \
+HTTPS_PROXY=http://127.0.0.1:{proxyPort} \
+python3 -c "import requests; print(requests.get('https://httpbin.org/get').json())"</pre>
+            </div>
+            <div class="curl-section">
+              <h4>Browser (Chrome)</h4>
+              <p class="curl-note">Set system proxy to <code>127.0.0.1:{proxyPort}</code> then browse normally.</p>
+              <p class="curl-note" style="margin-top: 4px;"><strong>macOS:</strong> System Settings → Network → Wi-Fi → Details → Proxies → turn on Web Proxy (HTTP) & Secure Web Proxy (HTTPS) → Server: <code>127.0.0.1</code> Port: <code>{proxyPort}</code></p>
+              <p class="curl-note"><strong>Windows:</strong> Settings → Network & Internet → Proxy → Manual proxy → Address: <code>127.0.0.1</code> Port: <code>{proxyPort}</code></p>
+              <p class="curl-note" style="color: var(--orange); margin-top: 4px;">&#9888; YouTube/Google use QUIC (HTTP/3 over UDP) which bypasses proxy. Disable it:<br/>Open <code>chrome://flags/#enable-quic</code> → set to <strong>Disabled</strong> → Relaunch</p>
+            </div>
+            <div class="curl-section">
+              <h4>Browser (Safari)</h4>
+              <p class="curl-note">Set system proxy, then disable QUIC:<br/><code>defaults write com.apple.Safari IncludeInternalDebugMenu 1</code></p>
+            </div>
+            <div class="curl-section">
+              <h4>Mobile phone</h4>
+              <p class="curl-note">Connect phone & computer to same WiFi. Set phone WiFi proxy to <code>computer-ip:{proxyPort}</code>. Export CA cert and install on phone.</p>
+            </div>
+          </div>
+        {/if}
       </div>
     {:else}
       <table class="proxy-table">
@@ -872,11 +982,19 @@
   .content { display: flex; flex: 1; overflow: hidden; background: var(--bg); }
   .payload-list { flex: 1; overflow-y: auto; padding: 12px 16px; background: var(--bg); }
 
-  .empty-state { text-align: center; padding: 80px 20px; color: var(--text-dim); }
+  .empty-state { text-align: center; padding: 40px 20px 40px; color: var(--text-dim); }
   .empty-icon { font-size: 42px; margin-bottom: 16px; opacity: 0.6; }
   .empty-state h3 { color: var(--text); margin-bottom: 8px; font-size: 15px; }
   .empty-state p { font-size: 13px; margin-bottom: 4px; }
   .empty-state code { background: var(--bg-surface); padding: 2px 6px; border-radius: 4px; color: var(--accent); font-size: 12px; border: 1px solid var(--border); }
+  .curl-toggle-btn { margin-top: 16px; padding: 6px 16px; font-size: 12px; background: var(--bg-surface); color: var(--accent); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; transition: all 0.15s; }
+  .curl-toggle-btn:hover { background: var(--accent); color: #fff; }
+  .curl-examples { margin-top: 16px; text-align: left; max-width: 620px; margin-inline: auto; }
+  .curl-section { margin-bottom: 12px; }
+  .curl-section h4 { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .curl-code { background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; font-size: 12px; color: var(--green); font-family: "SF Mono", "Fira Code", monospace; overflow-x: auto; white-space: pre; margin: 0; }
+  .curl-note { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+  .curl-note code { background: var(--bg-surface); padding: 1px 5px; border-radius: 3px; font-size: 11px; color: var(--accent); border: 1px solid var(--border); }
 
   .payload-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 6px; overflow: hidden; transition: border-color 0.15s; }
   .payload-card:hover { border-color: var(--border-light); }
@@ -1013,6 +1131,10 @@
 
   .ca-cert-bar { display: flex; align-items: flex-start; gap: 10px; padding: 8px 20px; background: var(--bg-elevated); border-bottom: 1px solid var(--border); }
   .ca-cert-pre { flex: 1; font-size: 10px; font-family: "SF Mono","Fira Code",Menlo,monospace; white-space: pre-wrap; word-break: break-all; color: var(--text-dim); background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; max-height: 120px; overflow-y: auto; margin: 0; }
+
+  .ca-install-msg { padding: 6px 20px; font-size: 12px; border-bottom: 1px solid var(--border); background: var(--bg-surface); }
+  .ca-install-msg.ok { color: var(--green); background: var(--green-soft); }
+  .ca-install-msg.err { color: var(--red); background: var(--red-soft); }
 
   .proxy-content { flex: 1; overflow-y: auto; padding: 0; background: var(--bg); }
 

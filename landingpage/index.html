@@ -16,7 +16,7 @@
   <meta property="og:description" content="Intercept, inspect, and forward incoming webhook payloads in real-time. Free for macOS, Windows & Linux.">
   <meta property="og:url" content="https://watchakorn-18k.github.io/inter-load/">
   <meta property="og:site_name" content="Inter-Load">
-  <meta property="og:image" content="https://watchakorn-18k.github.io/inter-load/screens/image.png">
+  <meta property="og:image" content="https://raw.githubusercontent.com/watchakorn-18k/inter-load/main/screens/image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
 
@@ -24,7 +24,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Inter-Load — Desktop Webhook Inspector & Forwarder">
   <meta name="twitter:description" content="Intercept, inspect, and forward incoming webhook payloads in real-time. Free for macOS, Windows & Linux.">
-  <meta name="twitter:image" content="https://watchakorn-18k.github.io/inter-load/screens/image.png">
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/watchakorn-18k/inter-load/main/screens/image.png">
 
   <!-- Structured Data -->
   <script type="application/ld+json">
@@ -51,8 +51,8 @@
   </script>
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" sizes="32x32" href="../src-tauri/icons/32x32.png">
-  <link rel="icon" type="image/png" sizes="128x128" href="../src-tauri/icons/128x128.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/32x32.png">
+  <link rel="icon" type="image/png" sizes="128x128" href="icons/128x128.png">
 
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
@@ -68,6 +68,11 @@
     html{scroll-behavior:smooth}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--text);background:var(--bg);line-height:1.7;transition:background .3s,color .3s}
     a{color:var(--teal);text-decoration:none}
+
+    /* Network background */
+    #networkBg{position:fixed;top:0;left:0;width:100%;height:100%;z-index:-1;pointer-events:none;filter:blur(3px);opacity:.5}
+    [data-theme="dark"] #networkBg{opacity:.35}
+    @media(prefers-reduced-motion:reduce){#networkBg{display:none}}
     .container{max-width:1120px;margin:0 auto;padding:0 24px}
 
     /* Nav */
@@ -156,16 +161,113 @@
 
     code{background:var(--code-bg);padding:2px 6px;border-radius:4px;font-size:.85em}
 
+    /* Scroll reveal */
+    .reveal{opacity:0;transform:translateY(32px);transition:opacity .7s ease,transform .7s ease}
+    .reveal.visible{opacity:1;transform:translateY(0)}
+
+    /* Flow animation */
+    .flow{padding:80px 0;background:var(--card-bg);overflow:hidden}
+    .flow h2{text-align:center;font-size:2rem;font-weight:700;margin-bottom:48px}
+    .flow-visual{display:flex;align-items:center;justify-content:center;gap:0;position:relative;max-width:900px;margin:0 auto;padding:40px 0}
+    .flow-node{text-align:center;position:relative;z-index:2;flex-shrink:0;width:160px}
+    .flow-node .node-box{background:var(--bg);border:2px solid var(--border);border-radius:16px;padding:20px 16px;transition:border-color .3s,box-shadow .3s}
+    .flow-node .node-box svg{width:36px;height:36px;margin-bottom:8px;color:var(--teal)}
+    .flow-node .node-box h4{font-size:.9rem;font-weight:600;margin-bottom:4px}
+    .flow-node .node-box p{font-size:.75rem;color:var(--text-light)}
+    .flow-arrow{flex:1;min-width:40px;max-width:120px;height:2px;position:relative;z-index:1}
+    .flow-arrow .arrow-line{width:100%;height:2px;background:var(--border);position:relative}
+    .flow-arrow .arrow-head{position:absolute;right:-4px;top:-4px;width:0;height:0;border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:8px solid var(--teal)}
+    .flow-packet{position:absolute;width:10px;height:10px;background:var(--teal);border-radius:50%;top:-4px;left:0;opacity:0}
+    .flow-packet.animate{animation:packetMove 2.5s ease-in-out infinite}
+    .flow-packet.d1{animation-delay:.0s}
+    .flow-packet.d2{animation-delay:.4s}
+    .flow-packet.d3{animation-delay:.8s}
+    @keyframes packetMove{0%{left:0;opacity:0}10%{opacity:1}90%{opacity:1}100%{left:calc(100% - 10px);opacity:0}}
+    .flow-node.pulse .node-box{border-color:var(--teal);box-shadow:0 0 20px rgba(16,183,196,.2)}
+
+    /* Live demo */
+    .demo{padding:80px 0;overflow:hidden}
+    .demo h2{text-align:center;font-size:2rem;font-weight:700;margin-bottom:12px}
+    .demo>p{text-align:center;color:var(--text-light);margin-bottom:48px}
+    .demo-terminal{max-width:720px;margin:0 auto;border-radius:16px;overflow:hidden;border:1px solid var(--border);background:var(--navy);box-shadow:0 20px 60px rgba(6,30,77,.18)}
+    .demo-titlebar{display:flex;align-items:center;gap:8px;padding:12px 16px;background:rgba(0,0,0,.2)}
+    .demo-titlebar .dot{width:10px;height:10px;border-radius:50%}
+    .demo-titlebar .dot.r{background:#ff5f57}
+    .demo-titlebar .dot.y{background:#febc2e}
+    .demo-titlebar .dot.g{background:#28c840}
+    .demo-titlebar span{color:#94a3b8;font-size:.8rem;margin-left:8px;font-family:monospace}
+    .demo-body{padding:20px;font-family:'SF Mono',Monaco,'Cascadia Code',monospace;font-size:.82rem;line-height:1.8;color:#e2e8f0;min-height:260px}
+    .demo-body .cmd{color:#94a3b8}
+    .demo-body .method{color:#10B7C4;font-weight:700}
+    .demo-body .url{color:#febc2e}
+    .demo-body .header-line{color:#64748b}
+    .demo-body .key{color:#a78bfa}
+    .demo-body .str{color:#34d399}
+    .demo-body .num{color:#fb923c}
+    .demo-body .cursor{display:inline-block;width:8px;height:14px;background:#10B7C4;vertical-align:middle;animation:blink 1s step-end infinite}
+    @keyframes blink{50%{opacity:0}}
+    .demo-body .line{opacity:0;transform:translateX(-8px);transition:opacity .4s,transform .4s}
+    .demo-body .line.show{opacity:1;transform:translateX(0)}
+    .demo-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(16,183,196,.15);color:#10B7C4;padding:2px 10px;border-radius:12px;font-size:.75rem;font-weight:600;margin-bottom:6px}
+    .demo-badge .dot-live{width:6px;height:6px;border-radius:50%;background:#10B7C4;animation:pulse-dot 1.5s infinite}
+    @keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.3}}
+
+    /* Use cases */
+    .usecases{padding:80px 0}
+    .usecases h2{text-align:center;font-size:2rem;font-weight:700;margin-bottom:8px}
+    .section-sub{text-align:center;color:var(--text-light);margin-bottom:48px;font-size:1.05rem}
+    .usecase-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px}
+    .usecase-card{padding:32px;border-radius:16px;border:1px solid var(--border);background:var(--card-bg);position:relative;transition:border-color .2s,transform .2s}
+    .usecase-card:hover{border-color:var(--teal);transform:translateY(-4px)}
+    .usecase-num{font-size:3rem;font-weight:800;background:linear-gradient(135deg,var(--teal),var(--teal-light));-webkit-background-clip:text;-webkit-text-fill-color:transparent;opacity:.6;line-height:1;margin-bottom:12px}
+    .usecase-card h3{font-size:1.1rem;font-weight:700;margin-bottom:8px}
+    .usecase-card p{color:var(--text-light);font-size:.9rem;line-height:1.7}
+    .usecase-tags{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+    .usecase-tags span{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:.75rem;font-weight:500;color:var(--text-light)}
+    .usecase-toggle{margin-top:16px;background:none;border:1px solid var(--teal);color:var(--teal);padding:8px 20px;border-radius:8px;font-size:.85rem;font-weight:600;cursor:pointer;transition:background .2s,color .2s}
+    .usecase-toggle:hover{background:var(--teal);color:#fff}
+    .usecase-card.expanded .usecase-toggle{background:var(--teal);color:#fff}
+    .usecase-steps{max-height:0;overflow:hidden;transition:max-height .5s ease}
+    .usecase-card.expanded .usecase-steps{max-height:600px}
+    .step-list{margin-top:20px;display:flex;flex-direction:column;gap:10px}
+    .step-row{display:flex;gap:12px;align-items:flex-start}
+    .step-num{min-width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--teal),var(--teal-light));color:#fff;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;flex-shrink:0;margin-top:1px}
+    .step-text{color:var(--text-light);font-size:.88rem;line-height:1.6;flex:1}
+    .step-text strong{color:var(--text);font-weight:600}
+    .step-text code{background:var(--code-bg);padding:1px 6px;border-radius:4px;font-size:.82em}
+
+    /* FAQ */
+    .faq{padding:80px 0;background:var(--card-bg)}
+    .faq h2{text-align:center;font-size:2rem;font-weight:700;margin-bottom:48px}
+    .faq-list{max-width:720px;margin:0 auto}
+    .faq-item{border-bottom:1px solid var(--border)}
+    .faq-q{width:100%;display:flex;align-items:center;justify-content:space-between;padding:20px 0;background:none;border:none;color:var(--text);font-size:1.05rem;font-weight:600;cursor:pointer;text-align:left;gap:16px}
+    .faq-q svg{flex-shrink:0;color:var(--text-light);transition:transform .3s}
+    .faq-item.open .faq-q svg{transform:rotate(180deg);color:var(--teal)}
+    .faq-a{max-height:0;overflow:hidden;transition:max-height .4s ease,padding .3s}
+    .faq-item.open .faq-a{max-height:300px;padding-bottom:20px}
+    .faq-a p{color:var(--text-light);font-size:.95rem;line-height:1.8}
+    .faq-a p code{background:var(--code-bg);padding:2px 6px;border-radius:4px;font-size:.85em}
+
     @media(max-width:640px){
       nav .links{display:none}
       .hero{padding:60px 0 50px}
       .hero h1{font-size:2rem}
       .hero p{font-size:1rem}
       .theme-menu{right:-60px}
+      .flow-visual{flex-direction:column;gap:0}
+      .flow-arrow{min-width:unset;max-width:unset;width:2px;height:40px;flex:unset}
+      .flow-arrow .arrow-line{width:2px;height:100%}
+      .flow-arrow .arrow-head{right:-4px;top:auto;bottom:-4px;border-top:8px solid var(--teal);border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:none}
+      .flow-packet{left:-4px !important;top:0 !important}
+      @keyframes packetMove{0%{top:0;opacity:0}10%{opacity:1}90%{opacity:1}100%{top:calc(100% - 10px);opacity:0}}
+      .flow-node{width:200px}
     }
   </style>
 </head>
 <body>
+
+<canvas id="networkBg"></canvas>
 
 <nav>
   <div class="container">
@@ -185,7 +287,8 @@
     <div class="nav-right">
       <div class="links">
         <a href="#features">Features</a>
-        <a href="#how">How It Works</a>
+        <a href="#usecases">Use Cases</a>
+        <a href="#faq">FAQ</a>
         <a href="#download">Download</a>
         <a href="https://github.com/watchakorn-18k/inter-load" target="_blank">GitHub</a>
       </div>
@@ -237,50 +340,96 @@
   </div>
 </section>
 
-<div class="screenshot">
-  <img src="../screens/image.png" alt="Inter-Load Screenshot">
+<div class="screenshot reveal">
+  <img src="https://raw.githubusercontent.com/watchakorn-18k/inter-load/main/screens/image.png" alt="Inter-Load Screenshot">
 </div>
+
+<!-- Animated Flow -->
+<section class="flow reveal" id="flow">
+  <div class="container">
+    <h2>See It In Action</h2>
+    <div class="flow-visual" id="flowVisual">
+      <div class="flow-node" id="flowSource">
+        <div class="node-box">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          <h4>Webhook Source</h4>
+          <p>Payment, GitHub,<br>Slack, Stripe...</p>
+        </div>
+      </div>
+      <div class="flow-arrow">
+        <div class="arrow-line">
+          <div class="flow-packet d1 animate"></div>
+          <div class="flow-packet d2 animate"></div>
+          <div class="flow-packet d3 animate"></div>
+        </div>
+        <div class="arrow-head"></div>
+      </div>
+      <div class="flow-node" id="flowInspect">
+        <div class="node-box">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <h4>Inter-Load</h4>
+          <p>Inspect, remap,<br>preview & debug</p>
+        </div>
+      </div>
+      <div class="flow-arrow">
+        <div class="arrow-line">
+          <div class="flow-packet d1 animate"></div>
+          <div class="flow-packet d2 animate"></div>
+          <div class="flow-packet d3 animate"></div>
+        </div>
+        <div class="arrow-head"></div>
+      </div>
+      <div class="flow-node" id="flowTarget">
+        <div class="node-box">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+          <h4>Your API</h4>
+          <p>Transformed payload<br>delivered safely</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
 <section class="features" id="features">
   <div class="container">
     <h2>What Can Inter-Load Do?</h2>
     <div class="features-grid">
-      <div class="feature-card">
+      <div class="feature-card reveal">
         <div class="feature-icon">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         </div>
         <h3>Capture All Webhooks</h3>
         <p>Runs a local HTTP server that accepts GET, POST, PUT, PATCH, DELETE — receives everything, no questions asked. Configurable port and path.</p>
       </div>
-      <div class="feature-card">
+      <div class="feature-card reveal">
         <div class="feature-icon">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         </div>
         <h3>Full Payload Inspection</h3>
         <p>See HTTP method, path, source IP, headers, and body with Pretty/Minified/Raw toggle. JSON auto-formatted for readability.</p>
       </div>
-      <div class="feature-card">
+      <div class="feature-card reveal">
         <div class="feature-icon">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
         </div>
         <h3>Visual Mapper & Forward</h3>
         <p>Remap payload keys, add custom headers, preview before sending, and forward to any endpoint with your chosen HTTP method.</p>
       </div>
-      <div class="feature-card">
+      <div class="feature-card reveal">
         <div class="feature-icon">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         </div>
         <h3>Save & Reuse Rules</h3>
         <p>Save forward rules for reuse. Auto-forward matching payloads without manual triggers — set it and forget it.</p>
       </div>
-      <div class="feature-card">
+      <div class="feature-card reveal">
         <div class="feature-icon">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
         </div>
         <h3>Export Payloads</h3>
         <p>Export captured payloads as JSON or CSV for further analysis, sharing, or integration with other tools.</p>
       </div>
-      <div class="feature-card">
+      <div class="feature-card reveal">
         <div class="feature-icon">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
         </div>
@@ -291,7 +440,7 @@
   </div>
 </section>
 
-<section class="how" id="how">
+<section class="how reveal" id="how">
   <div class="container">
     <h2>How It Works</h2>
     <div class="steps">
@@ -315,12 +464,360 @@
   </div>
 </section>
 
-<section class="download" id="download">
+<!-- Live Demo -->
+<section class="demo reveal" id="demo">
+  <div class="container">
+    <h2>Watch a Webhook Arrive</h2>
+    <p>A live simulation of what you see when a payment gateway sends a webhook to Inter-Load.</p>
+    <div class="demo-terminal">
+      <div class="demo-titlebar">
+        <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+        <span>Inter-Load — localhost:3030</span>
+      </div>
+      <div class="demo-body" id="demoBody">
+        <div class="line" data-delay="300"><span class="demo-badge"><span class="dot-live"></span> POST /webhook</span></div>
+        <div class="line" data-delay="600"><span class="header-line">Host:</span> <span class="url">localhost:3030</span></div>
+        <div class="line" data-delay="800"><span class="header-line">Content-Type:</span> <span class="url">application/json</span></div>
+        <div class="line" data-delay="1000"><span class="header-line">X-Signature:</span> <span class="url">sha256=a1b2c3d4...</span></div>
+        <div class="line" data-delay="1200">&nbsp;</div>
+        <div class="line" data-delay="1400">{</div>
+        <div class="line" data-delay="1600">&nbsp;&nbsp;<span class="key">"event"</span>: <span class="str">"payment.success"</span>,</div>
+        <div class="line" data-delay="1800">&nbsp;&nbsp;<span class="key">"amount"</span>: <span class="num">999</span>,</div>
+        <div class="line" data-delay="2000">&nbsp;&nbsp;<span class="key">"currency"</span>: <span class="str">"THB"</span>,</div>
+        <div class="line" data-delay="2200">&nbsp;&nbsp;<span class="key">"customer"</span>: {</div>
+        <div class="line" data-delay="2400">&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"name"</span>: <span class="str">"John Doe"</span>,</div>
+        <div class="line" data-delay="2600">&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"email"</span>: <span class="str">"john@example.com"</span></div>
+        <div class="line" data-delay="2800">&nbsp;&nbsp;},</div>
+        <div class="line" data-delay="3000">&nbsp;&nbsp;<span class="key">"transaction_id"</span>: <span class="str">"TXN-2024-001"</span></div>
+        <div class="line" data-delay="3200">}</div>
+        <div class="line" data-delay="3600">&nbsp;</div>
+        <div class="line" data-delay="3800"><span class="method">&#10003; Payload captured — inspecting...</span></div>
+        <div class="line" data-delay="4200"><span class="cmd">&#10140; Forward mapped payload to</span> <span class="url">POST https://my-api.com/payments</span></div>
+        <div class="line" data-delay="4600"><span class="method">&#10003; 200 OK — Forwarded successfully</span><span class="cursor"></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Use Cases -->
+<section class="usecases reveal" id="usecases">
+  <div class="container">
+    <h2>Who Uses Inter-Load?</h2>
+    <p class="section-sub">Real-world scenarios where Inter-Load saves your day.</p>
+    <div class="usecase-grid">
+
+      <div class="usecase-card reveal">
+        <div class="usecase-num">01</div>
+        <h3>Payment Gateway Integration</h3>
+        <p>Connecting Stripe, Omise, or TrueMoney but can't see what fields they send? Inter-Load captures the exact payload so you know the structure before writing a single line of handler code.</p>
+        <div class="usecase-tags"><span>Stripe</span><span>Omise</span><span>2C2P</span></div>
+        <button class="usecase-toggle" onclick="this.parentElement.classList.toggle('expanded')">Step by step</button>
+        <div class="usecase-steps">
+          <div class="step-list">
+            <div class="step-row"><div class="step-num">1</div><div class="step-text">Open Inter-Load — the webhook server starts automatically at <code>localhost:3030/webhook</code></div></div>
+            <div class="step-row"><div class="step-num">2</div><div class="step-text">Use <strong>Send Test Payload</strong> to send a sample JSON and verify the server is working</div></div>
+            <div class="step-row"><div class="step-num">3</div><div class="step-text">When the payment gateway sends a real webhook — the payload appears instantly on the main screen with method, headers, and body</div></div>
+            <div class="step-row"><div class="step-num">4</div><div class="step-text">Click on the payload card → switch between <strong>Pretty / Minified / Raw</strong> views to inspect the JSON structure</div></div>
+            <div class="step-row"><div class="step-num">5</div><div class="step-text">Open the <strong>Mapper</strong> tab → select keys to remap (e.g. <code>data.amount</code> → <code>total</code>)</div></div>
+            <div class="step-row"><div class="step-num">6</div><div class="step-text">Click <strong>Preview</strong> to see the transformed payload, then click <strong>Forward</strong> to send it to your backend</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="usecase-card reveal">
+        <div class="usecase-num">02</div>
+        <h3>GitHub / GitLab Webhook Debug</h3>
+        <p>Building CI/CD automation or chat bots? See the exact push, PR, and issue event payloads — headers, signatures, and branch refs — all laid out clearly.</p>
+        <div class="usecase-tags"><span>GitHub</span><span>GitLab</span><span>Bitbucket</span></div>
+        <button class="usecase-toggle" onclick="this.parentElement.classList.toggle('expanded')">Step by step</button>
+        <div class="usecase-steps">
+          <div class="step-list">
+            <div class="step-row"><div class="step-num">1</div><div class="step-text">Go to <strong>Settings</strong> → change webhook path to <code>/webhook/github</code> → click <strong>Apply</strong> to restart the server</div></div>
+            <div class="step-row"><div class="step-num">2</div><div class="step-text">Use <strong>Send Test Payload</strong> to send a mock GitHub event like <code>{"action":"push","ref":"refs/heads/main"}</code></div></div>
+            <div class="step-row"><div class="step-num">3</div><div class="step-text">When a real GitHub event arrives — inspect headers like <code>X-GitHub-Event</code> and <code>X-Hub-Signature-256</code></div></div>
+            <div class="step-row"><div class="step-num">4</div><div class="step-text">Use the <strong>Filter</strong> search bar to show only specific event types, e.g. filter for <code>pull_request</code></div></div>
+            <div class="step-row"><div class="step-num">5</div><div class="step-text">Click <strong>Export → JSON/CSV</strong> to download all captured payloads for further analysis</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="usecase-card reveal">
+        <div class="usecase-num">03</div>
+        <h3>Third-Party API Migration</h3>
+        <p>Switching from one provider to another? Intercept the old format, visually remap keys to match the new API, and forward — no manual JSON transformation needed.</p>
+        <div class="usecase-tags"><span>Migration</span><span>Key Mapping</span></div>
+        <button class="usecase-toggle" onclick="this.parentElement.classList.toggle('expanded')">Step by step</button>
+        <div class="usecase-steps">
+          <div class="step-list">
+            <div class="step-row"><div class="step-num">1</div><div class="step-text">Wait for a payload from the old provider to arrive (or use <strong>Send Test Payload</strong> to paste a sample)</div></div>
+            <div class="step-row"><div class="step-num">2</div><div class="step-text">Click the payload → open the <strong>Mapper</strong> tab</div></div>
+            <div class="step-row"><div class="step-num">3</div><div class="step-text">Select a key to rename — e.g. change <code>cust_name</code> → type <code>customer.fullName</code></div></div>
+            <div class="step-row"><div class="step-num">4</div><div class="step-text">Uncheck keys you want to drop from the output</div></div>
+            <div class="step-row"><div class="step-num">5</div><div class="step-text">Add custom headers the new API needs, e.g. <code>Authorization: Bearer xxx</code></div></div>
+            <div class="step-row"><div class="step-num">6</div><div class="step-text">Click <strong>Preview</strong> to verify → enter the new API URL → click <strong>Forward</strong></div></div>
+            <div class="step-row"><div class="step-num">7</div><div class="step-text">Click <strong>Save Rule</strong> — future payloads will auto-forward with the same mapping</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="usecase-card reveal">
+        <div class="usecase-num">04</div>
+        <h3>Slack / Discord Bot Dev</h3>
+        <p>Building interactive bots? Capture slash commands, button clicks, and event payloads. Inspect the exact structure and test your responses faster.</p>
+        <div class="usecase-tags"><span>Slack</span><span>Discord</span><span>LINE</span></div>
+        <button class="usecase-toggle" onclick="this.parentElement.classList.toggle('expanded')">Step by step</button>
+        <div class="usecase-steps">
+          <div class="step-list">
+            <div class="step-row"><div class="step-num">1</div><div class="step-text">Check current port and path in <strong>Settings</strong> (default: <code>localhost:3030/webhook</code>)</div></div>
+            <div class="step-row"><div class="step-num">2</div><div class="step-text">Use <strong>Send Test Payload</strong> to simulate interactions — Slack block actions, Discord slash commands, etc.</div></div>
+            <div class="step-row"><div class="step-num">3</div><div class="step-text">When a real interaction arrives — the payload shows <code>type</code>, <code>actions</code>, <code>user</code>, <code>channel</code> fields</div></div>
+            <div class="step-row"><div class="step-num">4</div><div class="step-text">Use <strong>Filter</strong> to search for specific fields or values in captured payloads</div></div>
+            <div class="step-row"><div class="step-num">5</div><div class="step-text">Use <strong>Mapper + Forward</strong> to transform and send payloads to your bot backend</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="usecase-card reveal">
+        <div class="usecase-num">05</div>
+        <h3>IoT & Sensor Data Monitoring</h3>
+        <p>Devices sending telemetry via HTTP? Watch sensor data arrive in real-time, inspect malformed payloads, and forward clean data to your database or dashboard.</p>
+        <div class="usecase-tags"><span>IoT</span><span>Sensors</span><span>Telemetry</span></div>
+        <button class="usecase-toggle" onclick="this.parentElement.classList.toggle('expanded')">Step by step</button>
+        <div class="usecase-steps">
+          <div class="step-list">
+            <div class="step-row"><div class="step-num">1</div><div class="step-text">Check the port in <strong>Settings</strong> (default 3030) — change it if needed, then click <strong>Apply</strong></div></div>
+            <div class="step-row"><div class="step-num">2</div><div class="step-text">Configure your IoT device to POST to <code>http://your-ip:3030/webhook</code></div></div>
+            <div class="step-row"><div class="step-num">3</div><div class="step-text">Watch sensor data arrive in real-time on the main screen</div></div>
+            <div class="step-row"><div class="step-num">4</div><div class="step-text">Click any payload → spot malformed fields, missing data, or incorrect values</div></div>
+            <div class="step-row"><div class="step-num">5</div><div class="step-text">Use <strong>Mapper</strong> to keep only the fields you need → click <strong>Save Rule</strong> to auto-forward clean data to your database</div></div>
+            <div class="step-row"><div class="step-num">6</div><div class="step-text">Click <strong>Export → CSV</strong> to download captured data for analysis in Excel or Python</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="usecase-card reveal">
+        <div class="usecase-num">06</div>
+        <h3>SMS & Email Webhook Debug</h3>
+        <p>Working with Twilio, SendGrid, or Mailgun? Capture delivery status, bounce notifications, and reply events to verify your callback handlers work correctly.</p>
+        <div class="usecase-tags"><span>Twilio</span><span>SendGrid</span><span>Mailgun</span></div>
+        <button class="usecase-toggle" onclick="this.parentElement.classList.toggle('expanded')">Step by step</button>
+        <div class="usecase-steps">
+          <div class="step-list">
+            <div class="step-row"><div class="step-num">1</div><div class="step-text">Open Inter-Load — server is ready at <code>localhost:3030/webhook</code></div></div>
+            <div class="step-row"><div class="step-num">2</div><div class="step-text">Use <strong>Send Test Payload</strong> to simulate a delivery callback, e.g. <code>{"event":"delivered","message_id":"SM123"}</code></div></div>
+            <div class="step-row"><div class="step-num">3</div><div class="step-text">When a real SMS/email event arrives — see <code>MessageStatus</code>, <code>event</code>, <code>reason</code> fields clearly</div></div>
+            <div class="step-row"><div class="step-num">4</div><div class="step-text">Set up <strong>Mapper + Save Rule</strong> to auto-forward bounce events to your monitoring system</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="usecase-card reveal">
+        <div class="usecase-num">07</div>
+        <h3>E-Commerce Order Webhooks</h3>
+        <p>Debug Shopify, WooCommerce, or Lazada order events — see exactly what fields come with order.created, order.updated, and refund events.</p>
+        <div class="usecase-tags"><span>Shopify</span><span>WooCommerce</span><span>Lazada</span></div>
+        <button class="usecase-toggle" onclick="this.parentElement.classList.toggle('expanded')">Step by step</button>
+        <div class="usecase-steps">
+          <div class="step-list">
+            <div class="step-row"><div class="step-num">1</div><div class="step-text">Open Inter-Load → go to <strong>Settings</strong> → set webhook path to <code>/webhook/shopify</code> → click <strong>Apply</strong></div></div>
+            <div class="step-row"><div class="step-num">2</div><div class="step-text">Use <strong>Send Test Payload</strong> to simulate an <code>orders/create</code> event with sample order data</div></div>
+            <div class="step-row"><div class="step-num">3</div><div class="step-text">When a real order comes in — inspect line items, customer info, shipping address, and payment details</div></div>
+            <div class="step-row"><div class="step-num">4</div><div class="step-text">Use <strong>Mapper</strong> to extract only the fields your system needs → <strong>Save Rule</strong> for auto-processing</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="usecase-card reveal">
+        <div class="usecase-num">08</div>
+        <h3>CI/CD Pipeline Testing</h3>
+        <p>Building custom CI/CD notifications? Capture build status, deploy events, and failure alerts from Jenkins, CircleCI, or GitHub Actions to build exactly the right handler.</p>
+        <div class="usecase-tags"><span>Jenkins</span><span>CircleCI</span><span>GitHub Actions</span></div>
+        <button class="usecase-toggle" onclick="this.parentElement.classList.toggle('expanded')">Step by step</button>
+        <div class="usecase-steps">
+          <div class="step-list">
+            <div class="step-row"><div class="step-num">1</div><div class="step-text">Open Inter-Load — server running at <code>localhost:3030/webhook</code></div></div>
+            <div class="step-row"><div class="step-num">2</div><div class="step-text">Use <strong>Send Test Payload</strong> to simulate a build failure event with status, commit SHA, and logs URL</div></div>
+            <div class="step-row"><div class="step-num">3</div><div class="step-text">When a real build event arrives — inspect <code>status</code>, <code>commit</code>, <code>branch</code>, and <code>conclusion</code> fields</div></div>
+            <div class="step-row"><div class="step-num">4</div><div class="step-text">Use <strong>Mapper</strong> → set up <strong>Save Rule</strong> to auto-forward only failed builds to your Slack/Telegram alert channel</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="usecase-card reveal">
+        <div class="usecase-num">09</div>
+        <h3>CRM Contact Sync</h3>
+        <p>Syncing contacts between Salesforce, HubSpot, or Pipedrive? Capture contact.created and deal.updated events, remap fields, and forward to your internal CRM.</p>
+        <div class="usecase-tags"><span>Salesforce</span><span>HubSpot</span><span>Pipedrive</span></div>
+        <button class="usecase-toggle" onclick="this.parentElement.classList.toggle('expanded')">Step by step</button>
+        <div class="usecase-steps">
+          <div class="step-list">
+            <div class="step-row"><div class="step-num">1</div><div class="step-text">Open Inter-Load — the server is listening at <code>localhost:3030/webhook</code></div></div>
+            <div class="step-row"><div class="step-num">2</div><div class="step-text">Use <strong>Send Test Payload</strong> to simulate a <code>contact.created</code> event with name, email, company</div></div>
+            <div class="step-row"><div class="step-num">3</div><div class="step-text">When a real CRM event arrives — inspect all contact fields and custom properties</div></div>
+            <div class="step-row"><div class="step-num">4</div><div class="step-text">Open <strong>Mapper</strong> → remap CRM fields to match your internal system (e.g. <code>email</code> → <code>contact_email</code>)</div></div>
+            <div class="step-row"><div class="step-num">5</div><div class="step-text">Click <strong>Save Rule</strong> — all future contact events will auto-sync to your system</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="usecase-card reveal">
+        <div class="usecase-num">10</div>
+        <h3>Monitoring & Alerting Webhooks</h3>
+        <p>Receiving alerts from Datadog, PagerDuty, or Grafana? Capture alert payloads to build custom routing, escalation rules, or notification formatting.</p>
+        <div class="usecase-tags"><span>Datadog</span><span>PagerDuty</span><span>Grafana</span></div>
+        <button class="usecase-toggle" onclick="this.parentElement.classList.toggle('expanded')">Step by step</button>
+        <div class="usecase-steps">
+          <div class="step-list">
+            <div class="step-row"><div class="step-num">1</div><div class="step-text">Open Inter-Load → check the port in <strong>Settings</strong> → click <strong>Apply</strong> if you changed it</div></div>
+            <div class="step-row"><div class="step-num">2</div><div class="step-text">Use <strong>Send Test Payload</strong> to simulate an alert with severity, host, and description</div></div>
+            <div class="step-row"><div class="step-num">3</div><div class="step-text">When a real alert fires — inspect <code>severity</code>, <code>host</code>, <code>metric</code>, and <code>threshold</code> fields</div></div>
+            <div class="step-row"><div class="step-num">4</div><div class="step-text">Use <strong>Filter</strong> to find only critical alerts → <strong>Mapper</strong> to format them for your Slack/Telegram bot</div></div>
+            <div class="step-row"><div class="step-num">5</div><div class="step-text">Click <strong>Save Rule</strong> to auto-forward critical alerts only, ignoring low-severity noise</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="usecase-card reveal">
+        <div class="usecase-num">11</div>
+        <h3>AI / LLM Callback Debugging</h3>
+        <p>Building AI agents with OpenAI, Claude, or LangChain? Capture tool-use callbacks, function call results, and streaming event payloads to debug your agent's decision loop.</p>
+        <div class="usecase-tags"><span>OpenAI</span><span>Claude</span><span>LangChain</span></div>
+        <button class="usecase-toggle" onclick="this.parentElement.classList.toggle('expanded')">Step by step</button>
+        <div class="usecase-steps">
+          <div class="step-list">
+            <div class="step-row"><div class="step-num">1</div><div class="step-text">Open Inter-Load → the server is ready at <code>localhost:3030/webhook</code></div></div>
+            <div class="step-row"><div class="step-num">2</div><div class="step-text">Use <strong>Send Test Payload</strong> to simulate a function call result, e.g. <code>{"tool":"search","result":{"items":[]}}</code></div></div>
+            <div class="step-row"><div class="step-num">3</div><div class="step-text">When your AI agent sends a real callback — inspect the full tool call payload including <code>function.name</code>, <code>arguments</code>, and <code>output</code></div></div>
+            <div class="step-row"><div class="step-num">4</div><div class="step-text">Use <strong>Pretty view</strong> to read nested JSON arguments easily</div></div>
+            <div class="step-row"><div class="step-num">5</div><div class="step-text">Set up <strong>Mapper + Save Rule</strong> to auto-forward specific tool results to your logging or evaluation pipeline</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="usecase-card reveal">
+        <div class="usecase-num">12</div>
+        <h3>Crypto & Blockchain Payments</h3>
+        <p>Accepting crypto payments with Coinbase Commerce, BitPay, or custom smart contract events? Capture transaction confirmations, address activity, and settlement notifications.</p>
+        <div class="usecase-tags"><span>Coinbase</span><span>BitPay</span><span>Smart Contracts</span></div>
+        <button class="usecase-toggle" onclick="this.parentElement.classList.toggle('expanded')">Step by step</button>
+        <div class="usecase-steps">
+          <div class="step-list">
+            <div class="step-row"><div class="step-num">1</div><div class="step-text">Open Inter-Load → go to <strong>Settings</strong> → set path to <code>/webhook/crypto</code> → click <strong>Apply</strong></div></div>
+            <div class="step-row"><div class="step-num">2</div><div class="step-text">Use <strong>Send Test Payload</strong> to simulate a <code>charge:confirmed</code> event with hash, amount, and currency</div></div>
+            <div class="step-row"><div class="step-num">3</div><div class="step-text">When a real transaction arrives — inspect <code>tx_hash</code>, <code>amount</code>, <code>confirmations</code>, and <code>address</code> fields</div></div>
+            <div class="step-row"><div class="step-num">4</div><div class="step-text">Verify the signature in headers to ensure the webhook is authentic</div></div>
+            <div class="step-row"><div class="step-num">5</div><div class="step-text">Use <strong>Mapper</strong> → extract only <code>tx_hash</code> and <code>amount</code> → <strong>Save Rule</strong> to auto-update your database on confirmed payments</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="usecase-card reveal">
+        <div class="usecase-num">13</div>
+        <h3>Form & Survey Submission Capture</h3>
+        <p>Collecting form data from Typeform, Google Forms, or custom webhooks? See every submission with all fields, validate the data structure, and route it to the right system.</p>
+        <div class="usecase-tags"><span>Typeform</span><span>Google Forms</span><span>Custom Forms</span></div>
+        <button class="usecase-toggle" onclick="this.parentElement.classList.toggle('expanded')">Step by step</button>
+        <div class="usecase-steps">
+          <div class="step-list">
+            <div class="step-row"><div class="step-num">1</div><div class="step-text">Open Inter-Load → check the server is running at <code>localhost:3030/webhook</code></div></div>
+            <div class="step-row"><div class="step-num">2</div><div class="step-text">Use <strong>Send Test Payload</strong> to simulate a form submission with name, email, and answers</div></div>
+            <div class="step-row"><div class="step-num">3</div><div class="step-text">When a real submission arrives — inspect all form fields, hidden fields, and metadata (submitted_at, user_agent)</div></div>
+            <div class="step-row"><div class="step-num">4</div><div class="step-text">Use <strong>Mapper</strong> to rename fields to match your CRM or database schema → click <strong>Preview</strong></div></div>
+            <div class="step-row"><div class="step-num">5</div><div class="step-text">Click <strong>Save Rule</strong> to auto-forward every new submission to your backend or email service</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- Q&A -->
+<section class="faq reveal" id="faq">
+  <div class="container">
+    <h2>Questions & Answers</h2>
+    <div class="faq-list">
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="this.parentElement.classList.toggle('open')">
+          Is Inter-Load free?
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="faq-a">
+          <p>Yes, 100% free and open source under the MIT license. No sign-up, no limits, no premium tier. Download and use it however you want.</p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="this.parentElement.classList.toggle('open')">
+          Does it work without internet?
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="faq-a">
+          <p>Yes. The webhook server runs entirely on your machine at <code>localhost:3030</code>. You only need internet if you want to forward payloads to an external API or receive webhooks from a remote service (via ngrok or similar tunnel).</p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="this.parentElement.classList.toggle('open')">
+          How do I receive webhooks from external services?
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="faq-a">
+          <p>Use a tunnel tool like <strong>ngrok</strong>, <strong>cloudflared</strong>, or <strong>localtunnel</strong> to expose your localhost to the internet. Point your webhook URL to the tunnel address, and Inter-Load will capture everything.</p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="this.parentElement.classList.toggle('open')">
+          Is my data safe?
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="faq-a">
+          <p>All payloads are stored in-memory on your machine only. Nothing is sent to any server or cloud. When you close the app, all captured data is gone. Inter-Load has zero telemetry.</p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="this.parentElement.classList.toggle('open')">
+          Can I remap payload keys before forwarding?
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="faq-a">
+          <p>Yes! That's the core feature. Pick any key from the incoming payload, rename it, toggle it on/off, add custom keys and headers, preview the result, then forward to any URL. You can also save the mapping as a rule for auto-forwarding.</p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="this.parentElement.classList.toggle('open')">
+          Which platforms are supported?
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="faq-a">
+          <p>Inter-Load runs on <strong>macOS</strong> (Apple Silicon & Intel), <strong>Windows</strong> (x64), and <strong>Linux</strong> (x64). Built with Tauri v2 for native performance on all platforms.</p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-q" onclick="this.parentElement.classList.toggle('open')">
+          Does it support WebSocket?
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="faq-a">
+          <p>Yes. Inter-Load supports both HTTP webhook interception and WebSocket message inspection, so you can debug real-time connections too.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="download reveal" id="download">
   <div class="container">
     <h2>Download Inter-Load</h2>
     <p>Free & open source. Available for all major platforms.</p>
     <div class="download-grid">
-      <div class="download-card">
+      <div class="download-card reveal">
         <div class="os-icon">&#63743;</div>
         <h3>macOS</h3>
         <p class="arch">Apple Silicon (M1/M2/M3/M4) & Intel</p>
@@ -329,7 +826,7 @@
         </div>
         <p class="note">Opens .dmg — drag to Applications.<br>If "damaged" warning appears, run:<br><code>xattr -cr /Applications/inter-load.app</code></p>
       </div>
-      <div class="download-card">
+      <div class="download-card reveal">
         <div class="os-icon">&#8862;</div>
         <h3>Windows</h3>
         <p class="arch">x64 (.msi installer)</p>
@@ -338,7 +835,7 @@
         </div>
         <p class="note">Run the .msi installer.<br>If SmartScreen warns, click "More info" → "Run anyway".</p>
       </div>
-      <div class="download-card">
+      <div class="download-card reveal">
         <div class="os-icon">&#9881;</div>
         <h3>Linux</h3>
         <p class="arch">x64 (.AppImage & .deb)</p>
@@ -351,7 +848,7 @@
   </div>
 </section>
 
-<section class="tech">
+<section class="tech reveal">
   <div class="container">
     <h2>Built With</h2>
     <div class="tech-badges">
@@ -422,6 +919,131 @@
   });
 
   init();
+})();
+
+// Scroll reveal
+(function(){
+  var els = document.querySelectorAll('.reveal');
+  var observer = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        e.target.classList.add('visible');
+      }
+    });
+  },{threshold:0.1,rootMargin:'0px 0px -40px 0px'});
+  els.forEach(function(el){observer.observe(el)});
+})();
+
+// Flow pulse
+(function(){
+  var nodes = document.querySelectorAll('.flow-node');
+  var idx = 0;
+  function pulse(){
+    nodes.forEach(function(n){n.classList.remove('pulse')});
+    nodes[idx].classList.add('pulse');
+    idx = (idx + 1) % nodes.length;
+  }
+  pulse();
+  setInterval(pulse, 1500);
+})();
+
+// Live demo typing
+(function(){
+  var demo = document.getElementById('demoBody');
+  var lines = demo.querySelectorAll('.line');
+  var triggered = false;
+  var observer = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting && !triggered){
+        triggered = true;
+        runDemo();
+      }
+    });
+  },{threshold:0.3});
+  observer.observe(demo);
+
+  function runDemo(){
+    lines.forEach(function(line){
+      line.classList.remove('show');
+    });
+    lines.forEach(function(line){
+      var delay = parseInt(line.dataset.delay) || 0;
+      setTimeout(function(){line.classList.add('show')}, delay);
+    });
+    // Loop every 10s
+    setTimeout(function(){
+      triggered = false;
+      lines.forEach(function(l){l.classList.remove('show')});
+    }, 10000);
+  }
+})();
+
+// Network background
+(function(){
+  var canvas = document.getElementById('networkBg');
+  var ctx = canvas.getContext('2d');
+  var particles = [];
+  var PARTICLE_COUNT = 60;
+  var CONNECTION_DIST = 160;
+
+  function resize(){
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  for(var i = 0; i < PARTICLE_COUNT; i++){
+    particles.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      vx: (Math.random() - 0.5) * 0.5,
+      vy: (Math.random() - 0.5) * 0.5,
+      r: Math.random() * 2 + 1
+    });
+  }
+
+  function getColor(){
+    var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    return dark ? 'rgba(16,183,196,' : 'rgba(6,30,77,';
+  }
+
+  function draw(){
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    var color = getColor();
+
+    for(var i = 0; i < particles.length; i++){
+      var p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      if(p.x < 0) p.x = canvas.width;
+      if(p.x > canvas.width) p.x = 0;
+      if(p.y < 0) p.y = canvas.height;
+      if(p.y > canvas.height) p.y = 0;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = color + '0.5)';
+      ctx.fill();
+
+      for(var j = i + 1; j < particles.length; j++){
+        var q = particles[j];
+        var dx = p.x - q.x;
+        var dy = p.y - q.y;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        if(dist < CONNECTION_DIST){
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(q.x, q.y);
+          ctx.strokeStyle = color + (0.15 * (1 - dist / CONNECTION_DIST)) + ')';
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        }
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
 })();
 </script>
 

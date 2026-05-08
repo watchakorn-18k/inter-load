@@ -378,6 +378,196 @@ fn get_ca_cert_pem(state: tauri::State<'_, Arc<AppState>>) -> Result<String, Str
 }
 
 #[tauri::command]
+fn check_ca_cert_installed(state: tauri::State<'_, Arc<AppState>>) -> Result<bool, String> {
+    let cert_pem = state.ca_cert_pem.lock().map_err(|e| e.to_string())?
+        .clone()
+        .ok_or_else(|| "CA certificate not generated yet. Start the proxy first.".to_string())?;
+
+    // Write cert to temp for verification
+    let cert_path = std::env::temp_dir().join("inter-load-ca.pem");
+    std::fs::write(&cert_path, &cert_pem)
+        .map_err(|e| format!("Failed to write temp cert: {}", e))?;
+
+    // Check if cert is already in System keychain and trusted
+    let output = std::process::Command::new("security")
+        .args(["find-certificate", "-a", "-c", "Inter-Load CA", "-p", "/Library/Keychains/System.keychain"])
+        .output()
+        .map_err(|e| format!("Failed to check cert: {}", e))?;
+
+    if output.status.success() && !output.stdout.is_empty() {
+        // Verify it's the same cert by comparing
+        let installed_pem = String::from_utf8_lossy(&output.stdout);
+        if installed_pem.contains("BEGIN CERTIFICATE") {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+#[tauri::command]
+fn install_ca_cert(state: tauri::State<'_, Arc<AppState>>) -> Result<String, String> {
+    let cert_pem = state.ca_cert_pem.lock().map_err(|e| e.to_string())?
+        .clone()
+        .ok_or_else(|| "CA certificate not generated yet. Start the proxy first.".to_string())?;
+
+    // Write cert to a fixed, user-accessible location
+    let cert_path = std::env::temp_dir().join("inter-load-ca.pem");
+    std::fs::write(&cert_path, &cert_pem)
+        .map_err(|e| format!("Failed to write temp cert: {}", e))?;
+
+    let cert_path_str = cert_path.to_string_lossy().to_string();
+
+    // macOS won't allow admin privilege escalation from Tauri's process context.
+    // We write a small helper shell script and open Terminal to run it with sudo.
+    let helper_script = format!(
+        "#!/bin/bash\n\
+echo \"Installing Inter-Load CA certificate...\"\n\
+echo \"Your password is needed to add the cert to the System Keychain.\"\n\
+echo \"\"\n\
+echo \"Removing old Inter-Load CA certificates...\"\n\
+while sudo security delete-certificate -c \"Inter-Load CA\" /Library/Keychains/System.keychain 2>/dev/null; do\n\
+    :\n\
+done\n\
+echo \"Adding new certificate...\"\n\
+sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain \"{cert_path_str}\"\n\
+if [ $? -eq 0 ]; then\n\
+    echo \"\"\n\
+    echo \"Success! CA certificate installed and trusted.\"\n\
+else\n\
+    echo \"\"\n\
+    echo \"Failed to install. Try manually:\"\n\
+    echo \"  1. Open Keychain Access\"\n\
+    echo \"  2. Drag the cert file into System keychain\"\n\
+    echo \"  3. Double-click the cert, set Trust to Always Trust\"\n\
+fi\n\
+echo \"\"\n\
+echo \"You can close this Terminal window.\"\n\
+read -n 1 -s"
+    );
+
+    let script_path = std::env::temp_dir().join("inter-load-install-cert.sh");
+    std::fs::write(&script_path, &helper_script)
+        .map_err(|e| format!("Failed to write helper script: {}", e))?;
+
+    // Make script executable
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| format!("Failed to set permissions: {}", e))?;
+    }
+
+    // Open Terminal.app and run the script — Terminal handles the sudo password prompt natively
+    std::process::Command::new("open")
+        .arg("-a")
+        .arg("Terminal")
+        .arg(&script_path)
+        .spawn()
+        .map_err(|e| format!("Failed to open Terminal: {}", e))?;
+
+    Ok("CA cert installation script opened in Terminal. Enter your password there to complete.".to_string())
+}
+
+#[tauri::command]
+fn open_system_proxy_settings() -> Result<String, String> {
+    std::process::Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.Network-Settings.extension")
+        .spawn()
+        .map_err(|e| format!("Failed to open System Settings: {}", e))?;
+    Ok("Opened Network settings. Go to Proxies tab to configure.".to_string())
+}
+
+#[tauri::command]
+fn set_system_proxy(port: u16) -> Result<String, String> {
+    // Try to set proxy automatically using networksetup
+    // Get the primary network service (usually "Wi-Fi")
+    let services_output = std::process::Command::new("networksetup")
+        .args(["-listallnetworkservices"])
+        .output()
+        .map_err(|e| format!("Failed to list network services: {}", e))?;
+
+    let services_str = String::from_utf8_lossy(&services_output.stdout);
+    let mut services: Vec<String> = services_str.lines()
+        .skip(1) // Skip header line
+        .filter(|s| !s.is_empty() && !s.contains("*"))
+        .map(|s| s.trim().to_string())
+        .collect();
+
+    // Prefer Wi-Fi, then Ethernet
+    services.sort_by_key(|s| {
+        if s.to_lowercase().contains("wi-fi") { 0 }
+        else if s.to_lowercase().contains("ethernet") { 1 }
+        else { 2 }
+    });
+
+    let service = services.first()
+        .ok_or_else(|| "No network service found".to_string())?
+        .clone();
+
+    let port_str = port.to_string();
+
+    // Set HTTP proxy
+    let http_out = std::process::Command::new("networksetup")
+        .args(["-setwebproxy", &service, "127.0.0.1", &port_str])
+        .output()
+        .map_err(|e| format!("Failed to set HTTP proxy: {}", e))?;
+
+    if !http_out.status.success() {
+        let err = String::from_utf8_lossy(&http_out.stderr);
+        return Err(format!("Failed to set HTTP proxy: {}. Try setting manually in System Settings.", err));
+    }
+
+    // Enable HTTP proxy
+    let _ = std::process::Command::new("networksetup")
+        .args(["-setwebproxystate", &service, "on"])
+        .output();
+
+    // Set HTTPS proxy
+    let https_out = std::process::Command::new("networksetup")
+        .args(["-setsecurewebproxy", &service, "127.0.0.1", &port_str])
+        .output()
+        .map_err(|e| format!("Failed to set HTTPS proxy: {}", e))?;
+
+    if !https_out.status.success() {
+        let err = String::from_utf8_lossy(&https_out.stderr);
+        return Err(format!("Failed to set HTTPS proxy: {}. Try setting manually in System Settings.", err));
+    }
+
+    // Enable HTTPS proxy
+    let _ = std::process::Command::new("networksetup")
+        .args(["-setsecurewebproxystate", &service, "on"])
+        .output();
+
+    Ok(format!("System proxy set to 127.0.0.1:{} on \"{}\". Remember to disable when done!", port, service))
+}
+
+#[tauri::command]
+fn disable_system_proxy() -> Result<String, String> {
+    let services_output = std::process::Command::new("networksetup")
+        .args(["-listallnetworkservices"])
+        .output()
+        .map_err(|e| format!("Failed to list network services: {}", e))?;
+
+    let services_str = String::from_utf8_lossy(&services_output.stdout);
+    let services: Vec<String> = services_str.lines()
+        .skip(1)
+        .filter(|s| !s.is_empty() && !s.contains("*"))
+        .map(|s| s.trim().to_string())
+        .collect();
+
+    for service in &services {
+        let _ = std::process::Command::new("networksetup")
+            .args(["-setwebproxystate", service, "off"])
+            .output();
+        let _ = std::process::Command::new("networksetup")
+            .args(["-setsecurewebproxystate", service, "off"])
+            .output();
+    }
+
+    Ok("System proxy disabled.".to_string())
+}
+
+#[tauri::command]
 fn start_proxy_cmd(
     state: tauri::State<'_, Arc<AppState>>,
     port: u16,
@@ -884,7 +1074,8 @@ pub fn run() {
             toggle_forward_rule, get_auto_forward_logs, get_ws_status,
             export_payloads, write_export_file,
             get_proxy_status, get_proxy_traffic, clear_proxy_traffic,
-            get_ca_cert_pem, start_proxy_cmd, stop_proxy_cmd,
+            get_ca_cert_pem, install_ca_cert, check_ca_cert_installed, start_proxy_cmd, stop_proxy_cmd,
+            open_system_proxy_settings, set_system_proxy, disable_system_proxy,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
